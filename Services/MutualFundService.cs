@@ -64,8 +64,8 @@ public class MutualFundService : IMutualFundService
         // Get all knowledge from database
         var allData = await _repository.GetAllKnowledgeAsync();
 
-        // Find best match using cosine similarity
-        var bestMatch = allData
+        // Find top 3 matches using cosine similarity
+        var topMatches = allData
             .Where(x => !string.IsNullOrEmpty(x.Embedding))
             .Select(x => new
             {
@@ -76,9 +76,10 @@ public class MutualFundService : IMutualFundService
                 )
             })
             .OrderByDescending(x => x.Score)
-            .FirstOrDefault();
+            .Take(3)
+            .ToList();
 
-        if (bestMatch == null || bestMatch.Score < 0.6)
+        if (!topMatches.Any() || topMatches[0].Score < 0.6)
         {
             var noInfoResponse = "I don't have enough information.";
             _chatHistory.Add(new ChatMessage { Role = "Assistant", Content = noInfoResponse });
@@ -90,8 +91,19 @@ public class MutualFundService : IMutualFundService
             return noInfoResponse;
         }
 
+        // Combine top 3 contexts
+        var context = string.Join("\n", topMatches.Select(x => x.Data.Answer));
+
         // Generate AI response using LLM with chat history
-        var aiResponse = await _llmService.AskLLMAsync(bestMatch.Data.Answer, query, _chatHistory);
+        var aiResponse = await _llmService.AskLLMAsync(context, query, _chatHistory);
+
+        // Safety filter
+        if (aiResponse.Contains("guarantee", StringComparison.OrdinalIgnoreCase) || 
+            aiResponse.Contains("$") ||
+            aiResponse.Contains("₹"))
+        {
+            return "I can provide general information but not financial advice.";
+        }
 
         // Save bot response
         _chatHistory.Add(new ChatMessage { Role = "Assistant", Content = aiResponse });
