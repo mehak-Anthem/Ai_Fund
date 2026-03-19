@@ -25,6 +25,8 @@ builder.Services.AddScoped<IRewriteService, RewriteService>();
 builder.Services.AddSingleton<IPersonalityService, PersonalityService>();
 builder.Services.AddSingleton<IExpansionService, ExpansionService>();
 builder.Services.AddSingleton<IComparisonService, ComparisonService>();
+builder.Services.AddScoped<IStructuredAnswerService, StructuredAnswerService>();
+builder.Services.AddScoped<ISmartGuidanceService, SmartGuidanceService>();
 
 // Add memory cache
 builder.Services.AddMemoryCache();

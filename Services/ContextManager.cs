@@ -13,6 +13,8 @@ public interface IContextManager
     string GetLastAnswer(string userId);
     void SaveLastEntities(string userId, string entity1, string entity2);
     (string Entity1, string Entity2)? GetLastEntities(string userId);
+    void SaveRichContext(string userId, string userQuery, string answer, string topic, List<string> entities);
+    ConversationContext? GetRichContext(string userId);
 }
 
 public class ContextManager : IContextManager
@@ -110,6 +112,33 @@ public class ContextManager : IContextManager
         return null;
     }
 
+    public void SaveRichContext(string userId, string userQuery, string answer, string topic, List<string> entities)
+    {
+        _userContexts[userId] = new ConversationContext
+        {
+            LastUserQuery = userQuery,
+            LastAnswer = answer,
+            LastTopic = topic,
+            LastEntities = entities ?? new List<string>(),
+            LastEntity1 = entities?.Count > 0 ? entities[0] : string.Empty,
+            LastEntity2 = entities?.Count > 1 ? entities[1] : string.Empty,
+            Timestamp = DateTime.UtcNow
+        };
+    }
+
+    public ConversationContext? GetRichContext(string userId)
+    {
+        if (_userContexts.TryGetValue(userId, out var context))
+        {
+            if (DateTime.UtcNow - context.Timestamp < _contextTimeout)
+            {
+                return context;
+            }
+            _userContexts.Remove(userId);
+        }
+        return null;
+    }
+
     public string GetLastQuestion(string userId)
     {
         if (_userContexts.TryGetValue(userId, out var context))
@@ -141,23 +170,24 @@ public class ContextManager : IContextManager
     {
         query = query.ToLower().Trim();
         
+        // Short queries are likely follow-ups
+        if (query.Length < 20)
+            return true;
+        
         // Single word follow-ups
         if (query == "why" || query == "how" || query == "more" || query == "what" || query == "when")
             return true;
         
-        // Check for follow-up indicators
-        return query.Contains("why") ||
-               query.Contains("more") ||
-               query.Contains("it") ||
+        // Check for vague reference words
+        return query.Contains("it") ||
                query.Contains("that") ||
                query.Contains("this") ||
+               query.Contains("more") ||
                query.Contains("then") ||
-               query.Contains("how") ||
                query.Contains("explain") ||
                query.Contains("tell me more") ||
                query.Contains("what about") ||
-               query.Contains("how about") ||
-               query.Length < 5;
+               query.Contains("how about");
     }
 
     public string ResolveFollowUp(string query, string userId)
@@ -165,12 +195,12 @@ public class ContextManager : IContextManager
         if (!IsFollowUpQuery(query))
             return query;
 
-        var (lastTopic, _) = GetLastContext(userId);
+        var context = GetRichContext(userId);
         
-        if (!string.IsNullOrEmpty(lastTopic))
+        if (context != null && !string.IsNullOrEmpty(context.LastTopic))
         {
-            // Inject context into query
-            return $"{lastTopic} {query}";
+            // Attach topic to vague query for better RAG retrieval
+            return $"{context.LastTopic} - {query}";
         }
         
         return query;
@@ -179,10 +209,12 @@ public class ContextManager : IContextManager
 
 public class ConversationContext
 {
+    public string LastUserQuery { get; set; } = string.Empty;
+    public string LastAnswer { get; set; } = string.Empty;
     public string LastTopic { get; set; } = string.Empty;
+    public List<string> LastEntities { get; set; } = new List<string>();
     public string LastIntent { get; set; } = string.Empty;
     public string LastQuestion { get; set; } = string.Empty;
-    public string LastAnswer { get; set; } = string.Empty;
     public string LastEntity1 { get; set; } = string.Empty;
     public string LastEntity2 { get; set; } = string.Empty;
     public DateTime Timestamp { get; set; }

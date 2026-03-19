@@ -4,6 +4,7 @@ public interface IComparisonService
 {
     bool IsComparisonQuery(string query);
     (string Entity1, string Entity2)? ExtractEntities(string query);
+    List<string> ExtractAllEntities(string query);
     string ResolveComparison(string query, string userId, IContextManager contextManager);
 }
 
@@ -23,8 +24,37 @@ public class ComparisonService : IComparisonService
                (query.Contains("between") && query.Contains("and"));
     }
 
+    public List<string> ExtractAllEntities(string query)
+    {
+        var entities = new List<string>();
+        query = query.ToLower();
+
+        // Check for specific financial entities
+        if (query.Contains("sip")) entities.Add("SIP");
+        if (query.Contains("mutual fund")) entities.Add("Mutual Fund");
+        if (query.Contains("fd") || query.Contains("fixed deposit")) entities.Add("Fixed Deposit");
+        if (query.Contains("stock") || query.Contains("equity")) entities.Add("Stock");
+        if (query.Contains("bond")) entities.Add("Bond");
+        if (query.Contains("etf")) entities.Add("ETF");
+        if (query.Contains("ppf")) entities.Add("PPF");
+        if (query.Contains("nps")) entities.Add("NPS");
+        if (query.Contains("gold")) entities.Add("Gold");
+        if (query.Contains("real estate") || query.Contains("property")) entities.Add("Real Estate");
+
+        return entities.Distinct().ToList();
+    }
+
     public (string Entity1, string Entity2)? ExtractEntities(string query)
     {
+        // First try to extract all entities
+        var allEntities = ExtractAllEntities(query);
+        
+        // If we have at least 2, return first two for backward compatibility
+        if (allEntities.Count >= 2)
+        {
+            return (allEntities[0], allEntities[1]);
+        }
+
         query = query.ToLower();
 
         // Pattern: "difference between X and Y"

@@ -6,6 +6,11 @@ public static class IntentDetector
     {
         query = query.ToLower();
 
+        // 0. GREETING - "how are you" variations
+        if (query.Contains("how are you") || query.Contains("how are u") || 
+            query.Contains("how r you") || query.Contains("how r u"))
+            return "GREETING";
+
         // 1. COMPARISON (high priority)
         if (query.Contains("difference") || query.Contains("diff") || query.Contains(" vs ") || 
             query.Contains("versus") || query.Contains("compare") || 

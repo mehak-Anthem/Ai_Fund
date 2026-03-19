@@ -19,6 +19,8 @@ public class AiOrchestratorService : IAiOrchestratorService
     private readonly IPersonalityService _personalityService;
     private readonly IExpansionService _expansionService;
     private readonly IComparisonService _comparisonService;
+    private readonly IStructuredAnswerService _structuredAnswerService;
+    private readonly ISmartGuidanceService _smartGuidanceService;
 
     public AiOrchestratorService(
         IMutualFundRepository repository,
@@ -31,7 +33,9 @@ public class AiOrchestratorService : IAiOrchestratorService
         IRewriteService rewriteService,
         IPersonalityService personalityService,
         IExpansionService expansionService,
-        IComparisonService comparisonService)
+        IComparisonService comparisonService,
+        IStructuredAnswerService structuredAnswerService,
+        ISmartGuidanceService smartGuidanceService)
     {
         _repository = repository;
         _embeddingService = embeddingService;
@@ -44,6 +48,8 @@ public class AiOrchestratorService : IAiOrchestratorService
         _personalityService = personalityService;
         _expansionService = expansionService;
         _comparisonService = comparisonService;
+        _structuredAnswerService = structuredAnswerService;
+        _smartGuidanceService = smartGuidanceService;
     }
 
     public async Task<ChatResponse> ProcessQueryAsync(string query, string userId)
@@ -60,6 +66,14 @@ public class AiOrchestratorService : IAiOrchestratorService
             query = InputNormalizer.NormalizeInput(query);
             _logger.LogInformation("Normalized query: {Query}", query);
 
+            // 2.5. Handle "how are you" greeting
+            var lowerQuery = query.ToLower();
+            if (lowerQuery.Contains("how are you") || lowerQuery.Contains("how are u") || 
+                lowerQuery.Contains("how r you") || lowerQuery.Contains("how r u"))
+            {
+                return CreateResponse("I'm doing great 😊 How can I help you with mutual funds today?", "Static", 1.0, "GREETING");
+            }
+
             // 3. Resolve follow-up queries with context
             var originalQuery = query;
             var isExpansion = _expansionService.IsExpansionQuery(query);
@@ -68,13 +82,26 @@ public class AiOrchestratorService : IAiOrchestratorService
             // Handle comparison mode
             if (isComparison)
             {
-                // Try to extract entities from current query
-                var entities = _comparisonService.ExtractEntities(query);
-                if (entities.HasValue)
+                // Try to extract all entities from current query
+                var allEntities = _comparisonService.ExtractAllEntities(query);
+                
+                if (allEntities.Count >= 2)
                 {
-                    // Save entities for future reference
-                    _contextManager.SaveLastEntities(userId, entities.Value.Entity1, entities.Value.Entity2);
-                    _logger.LogInformation("Comparison entities saved: {E1} vs {E2}", entities.Value.Entity1, entities.Value.Entity2);
+                    // Save first two entities for context
+                    _contextManager.SaveLastEntities(userId, allEntities[0], allEntities[1]);
+                    
+                    // Build multi-entity comparison query
+                    if (allEntities.Count == 2)
+                    {
+                        query = $"Compare {allEntities[0]} and {allEntities[1]} - explain differences, benefits, and risks";
+                    }
+                    else if (allEntities.Count >= 3)
+                    {
+                        var entityList = string.Join(", ", allEntities.Take(allEntities.Count - 1)) + " and " + allEntities.Last();
+                        query = $"Compare {entityList} - explain key differences, benefits, and risks of each";
+                    }
+                    
+                    _logger.LogInformation("Multi-comparison: {Count} entities - {Query}", allEntities.Count, query);
                 }
                 else
                 {
@@ -116,6 +143,30 @@ public class AiOrchestratorService : IAiOrchestratorService
             var intent = IntentDetector.DetectIntent(query);
             _logger.LogInformation("Query: {Query}, Intent: {Intent}, UserId: {UserId}", query, intent, userId);
 
+            // 6.5. Check for personal/guidance queries (HIGHEST PRIORITY)
+            var isPersonalQuery = _smartGuidanceService.IsPersonalQuery(originalQuery);
+            var needsStructuredEarly = _structuredAnswerService.NeedsStructuredAnswer(originalQuery);
+            
+            _logger.LogInformation("Personal query: {IsPersonal}, Structured: {NeedsStructured} for: {Query}", 
+                isPersonalQuery, needsStructuredEarly, originalQuery);
+            
+            // Skip static ADVICE for personal or structured queries
+            if (!isPersonalQuery && !needsStructuredEarly)
+            {
+                // 7. Handle static intents only if NOT a personal/structured query
+                var staticResponse = HandleStaticIntent(intent);
+                if (staticResponse != null)
+                {
+                    _logger.LogInformation("Returning static response for intent: {Intent}", intent);
+                    _contextManager.SaveContext(userId, query, intent, query);
+                    return staticResponse;
+                }
+            }
+            else
+            {
+                _logger.LogInformation("Skipping static ADVICE - will use smart guidance or structured answer");
+            }
+
             // 7. Handle comparison queries (NEW - before ResponseFormatter check)
             if (isComparison)
             {
@@ -142,15 +193,6 @@ public class AiOrchestratorService : IAiOrchestratorService
             if (ResponseFormatter.IsGuidanceQuery(query))
             {
                 return CreateResponse(ResponseFormatter.HandleGuidance(query), "Static", 1.0, "GUIDANCE");
-            }
-
-            // 3. Handle static intents
-            var staticResponse = HandleStaticIntent(intent);
-            if (staticResponse != null)
-            {
-                // Save context even for static responses
-                _contextManager.SaveContext(userId, query, intent, query);
-                return staticResponse;
             }
 
             // 4. Extract topic from query for context tracking
@@ -209,6 +251,133 @@ public class AiOrchestratorService : IAiOrchestratorService
 
             // 9. Build context
             var context = BuildContext(topMatches);
+
+            // 9.5. Check for personal query (PRIORITY 1)
+            if (isPersonalQuery)
+            {
+                _logger.LogInformation("Smart guidance mode for personal query: {Query}", originalQuery);
+                
+                // Check for returns query first
+                if (_smartGuidanceService.IsReturnsQuery(originalQuery))
+                {
+                    var returnsGuidance = _smartGuidanceService.GenerateReturnsGuidance();
+                    
+                    // Save rich context
+                    var returnsEntities = _comparisonService.ExtractAllEntities(originalQuery);
+                    _contextManager.SaveRichContext(userId, originalQuery, returnsGuidance, topic, returnsEntities);
+                    
+                    return CreateResponse(returnsGuidance, "SmartGuidance", 1.0, "GUIDANCE");
+                }
+                
+                // Check for amount-based query
+                var amount = _smartGuidanceService.ExtractAmount(originalQuery);
+                if (amount > 0)
+                {
+                    var investmentAdvice = _smartGuidanceService.GenerateInvestmentAdvice(amount);
+                    
+                    if (!string.IsNullOrEmpty(investmentAdvice))
+                    {
+                        // Save rich context
+                        var amountEntities = _comparisonService.ExtractAllEntities(originalQuery);
+                        _contextManager.SaveRichContext(userId, originalQuery, investmentAdvice, topic, amountEntities);
+                        
+                        return CreateResponse(investmentAdvice, "SmartGuidance", 1.0, "GUIDANCE");
+                    }
+                }
+                
+                // Fallback to AI-generated guidance
+                var guidedAnswer = await _smartGuidanceService.GenerateGuidedAnswerAsync(originalQuery, context);
+                
+                // Clean and format
+                guidedAnswer = CleanResponse(guidedAnswer);
+                guidedAnswer = _personalityService.ApplyPersonality(guidedAnswer);
+                
+                // Save rich context
+                var guidanceEntities = _comparisonService.ExtractAllEntities(originalQuery);
+                _contextManager.SaveRichContext(userId, originalQuery, guidedAnswer, topic, guidanceEntities);
+                
+                // Save to chat history
+                await _repository.SaveChatHistoryAsync(new Models.ChatHistory
+                {
+                    UserId = userId,
+                    Role = "Assistant",
+                    Message = guidedAnswer,
+                    CreatedDate = DateTime.UtcNow
+                });
+
+                // Save AI log
+                await _repository.SaveAiLogAsync(new Models.AiLog
+                {
+                    UserId = userId,
+                    Query = query,
+                    Response = guidedAnswer,
+                    ConfidenceScore = topMatches[0].Score,
+                    Intent = "GUIDANCE",
+                    Source = "SmartGuidance+LLM",
+                    CreatedDate = DateTime.UtcNow
+                });
+
+                var guidanceResponse = CreateResponse(guidedAnswer, "SmartGuidance+LLM", topMatches[0].Score, "GUIDANCE");
+                
+                // Cache the response
+                var guidanceCacheOptions = new MemoryCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
+                };
+                CacheExtensions.Set(_cache, cacheKey, guidanceResponse, guidanceCacheOptions);
+                
+                return guidanceResponse;
+            }
+
+            // 9.6. Check if structured answer is needed (PRIORITY 2)
+            var needsStructured = _structuredAnswerService.NeedsStructuredAnswer(originalQuery);
+            
+            if (needsStructured)
+            {
+                _logger.LogInformation("Structured answer mode for: {Query}", originalQuery);
+                
+                var structuredAnswer = await _structuredAnswerService.GenerateStructuredAnswerAsync(originalQuery, context);
+                
+                // Clean and format
+                structuredAnswer = CleanResponse(structuredAnswer);
+                structuredAnswer = _personalityService.ApplyPersonality(structuredAnswer);
+                
+                // Save rich context
+                var structuredEntities = _comparisonService.ExtractAllEntities(originalQuery);
+                _contextManager.SaveRichContext(userId, originalQuery, structuredAnswer, topic, structuredEntities);
+                
+                // Save to chat history
+                await _repository.SaveChatHistoryAsync(new Models.ChatHistory
+                {
+                    UserId = userId,
+                    Role = "Assistant",
+                    Message = structuredAnswer,
+                    CreatedDate = DateTime.UtcNow
+                });
+
+                // Save AI log
+                await _repository.SaveAiLogAsync(new Models.AiLog
+                {
+                    UserId = userId,
+                    Query = query,
+                    Response = structuredAnswer,
+                    ConfidenceScore = topMatches[0].Score,
+                    Intent = intent,
+                    Source = "Structured+LLM",
+                    CreatedDate = DateTime.UtcNow
+                });
+
+                var structuredResponse = CreateResponse(structuredAnswer, "Structured+LLM", topMatches[0].Score, intent);
+                
+                // Cache the response
+                var structuredCacheOptions = new MemoryCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
+                };
+                CacheExtensions.Set(_cache, cacheKey, structuredResponse, structuredCacheOptions);
+                
+                return structuredResponse;
+            }
 
             // 10. For high confidence matches AND not expansion mode, return direct answer
             if (topMatches[0].Score > 0.8 && !isExpansion)
@@ -292,10 +461,12 @@ public class AiOrchestratorService : IAiOrchestratorService
             });
             
             // Check for repetition and force expansion
-            var lastAnswer = _contextManager.GetLastAnswer(userId);
+            var richContext = _contextManager.GetRichContext(userId);
+            var lastAnswer = richContext?.LastAnswer ?? string.Empty;
+            var isFollowUpDetected = _contextManager.IsFollowUpQuery(originalQuery);
             var forceExpansion = isExpansion || (!string.IsNullOrEmpty(lastAnswer) && context.Contains(lastAnswer));
             
-            var aiResponse = await _llmService.AskLLMAsync(context, query, chatHistory, forceExpansion);
+            var aiResponse = await _llmService.AskLLMAsync(context, query, chatHistory, forceExpansion, isFollowUpDetected, lastAnswer);
 
             // Add contextual prefix for natural conversation
             var responsePrefix = ResponseEnhancer.GetContextualPrefix(query);
@@ -313,8 +484,9 @@ public class AiOrchestratorService : IAiOrchestratorService
             // Apply personality layer
             aiResponse = _personalityService.ApplyPersonality(aiResponse);
             
-            // Save answer for repetition detection
-            _contextManager.SaveLastAnswer(userId, aiResponse);
+            // Save rich context for future follow-ups
+            var extractedEntities = _comparisonService.ExtractAllEntities(originalQuery);
+            _contextManager.SaveRichContext(userId, originalQuery, aiResponse, topic, extractedEntities);
 
             // 12. Apply guardrails
             var guardedResponse = ApplyGuardrails(aiResponse);
@@ -487,7 +659,10 @@ public class AiOrchestratorService : IAiOrchestratorService
             "STRICT RULE", "Guidelines:", "Task:", "Your Role:",
             "professional financial content writer", "Keep the exact same information",
             "Maintaine all", "Do not use slaing", "Here's an updated version",
-            "Sure! Here's", "updated version of the sentence"
+            "Sure! Here's", "updated version of the sentence",
+            "Do NOT say", "Instead, start with", "Give simple approach",
+            "Show example with numbers", "End with practical tip",
+            "User:", "1.", "2.", "3.", "4."
         };
         
         foreach (var keyword in artifactKeywords)
@@ -539,16 +714,25 @@ public class AiOrchestratorService : IAiOrchestratorService
 
     private string ExtractTopic(string query)
     {
-        // Extract main topic from query (simple keyword extraction)
-        var keywords = new[] { "SIP", "mutual fund", "investment", "NAV", "return", "risk" };
+        query = query.ToLower();
         
-        foreach (var keyword in keywords)
-        {
-            if (query.Contains(keyword, StringComparison.OrdinalIgnoreCase))
-            {
-                return keyword;
-            }
-        }
+        // Extract main topic from query with priority order
+        if (query.Contains("sip")) return "SIP";
+        if (query.Contains("mutual fund")) return "Mutual Fund";
+        if (query.Contains("fd") || query.Contains("fixed deposit")) return "Fixed Deposit";
+        if (query.Contains("nav")) return "NAV";
+        if (query.Contains("stock") || query.Contains("equity")) return "Stock";
+        if (query.Contains("bond")) return "Bond";
+        if (query.Contains("etf")) return "ETF";
+        if (query.Contains("ppf")) return "PPF";
+        if (query.Contains("nps")) return "NPS";
+        if (query.Contains("gold")) return "Gold";
+        if (query.Contains("investment")) return "Investment";
+        if (query.Contains("return")) return "Returns";
+        if (query.Contains("risk")) return "Risk";
+        if (query.Contains("tax")) return "Tax";
+        if (query.Contains("withdrawal")) return "Withdrawal";
+        if (query.Contains("penalt")) return "Penalty";
         
         // Return first meaningful word if no keyword found
         var words = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
