@@ -79,9 +79,9 @@ public class SmartGuidanceService : ISmartGuidanceService
                query.Contains("profit") || 
                query.Contains("gain") ||
                query.Contains("earn") ||
-               query.Contains("how much i get") ||
-               query.Contains("how much will i get") ||
-               (query.Contains("what") && query.Contains("get"));
+               query.Contains("how much") ||
+               (query.Contains("what") && query.Contains("get")) ||
+               (query.Contains("what about") && query.Contains("return"));
     }
 
     public bool IsFDQuery(string query)

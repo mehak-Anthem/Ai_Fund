@@ -66,8 +66,12 @@ public class AiOrchestratorService : IAiOrchestratorService
             query = InputNormalizer.NormalizeInput(query);
             _logger.LogInformation("Normalized query: {Query}", query);
 
-            // 2.5. Handle "how are you" greeting
-            var lowerQuery = query.ToLower();
+            // 2.5. Handle greetings EARLY (before RAG)
+            var lowerQuery = query.ToLower().Trim();
+            if (lowerQuery == "hi" || lowerQuery == "hello" || lowerQuery == "hey")
+            {
+                return CreateResponse("Hello! How can I help you with mutual funds today?", "Static", 1.0, "GREETING");
+            }
             if (lowerQuery.Contains("how are you") || lowerQuery.Contains("how are u") || 
                 lowerQuery.Contains("how r you") || lowerQuery.Contains("how r u"))
             {
@@ -337,12 +341,15 @@ public class AiOrchestratorService : IAiOrchestratorService
                 var amount = _smartGuidanceService.ExtractAmount(originalQuery);
                 if (amount > 0)
                 {
+                    // Save context IMMEDIATELY so follow-up queries can access it
+                    var amountEntities = _comparisonService.ExtractAllEntities(originalQuery);
+                    _contextManager.SaveRichContext(userId, originalQuery, string.Empty, topic, amountEntities);
+                    
                     var investmentAdvice = _smartGuidanceService.GenerateInvestmentAdvice(amount);
                     
                     if (!string.IsNullOrEmpty(investmentAdvice))
                     {
-                        // Save rich context
-                        var amountEntities = _comparisonService.ExtractAllEntities(originalQuery);
+                        // Update context with answer
                         _contextManager.SaveRichContext(userId, originalQuery, investmentAdvice, topic, amountEntities);
                         
                         return CreateResponse(investmentAdvice, "SmartGuidance", 1.0, "GUIDANCE");
