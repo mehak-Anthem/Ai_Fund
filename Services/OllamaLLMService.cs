@@ -21,32 +21,13 @@ public class OllamaLLMService : ILLMService
         var historyText = string.Join("\n", chatHistory
             .Select(x => $"{x.Role}: {x.Content}"));
 
-        var prompt = $@"You are a professional financial assistant helping users understand mutual funds.
+        var prompt = $@"Answer this question using only the context below. Keep it short (2-3 sentences).
 
-Your Role:
-- Provide accurate, helpful information based only on the given context
-- Answer in a clear, professional, and friendly manner
-- Keep responses concise (2-4 lines maximum)
+Context: {context}
 
-Strict Rules:
-1. Answer ONLY from the provided context below
-2. Do NOT change financial terms (e.g., SIP must remain SIP)
-3. Do NOT add information not in the context
-4. Do NOT give personalized financial advice
-5. If the question is a follow-up, use conversation history for context
-6. Keep all financial safety disclaimers
-7. Maximum 3 sentences in your response
+Question: {query}
 
-Context:
-{context}
-
-Conversation History:
-{historyText}
-
-User Question:
-{query}
-
-Your Answer (2-3 sentences):";
+Answer:";
 
         var request = new
         {
@@ -55,8 +36,9 @@ Your Answer (2-3 sentences):";
             stream = false,
             options = new
             {
-                temperature = 0.3,
-                top_p = 0.9
+                temperature = 0.1,
+                top_p = 0.9,
+                max_tokens = 150
             }
         };
 
@@ -70,22 +52,11 @@ Your Answer (2-3 sentences):";
 
     public async Task<string> RewriteAnswerAsync(string answer, string query)
     {
-        var prompt = $@"You are a professional financial content writer.
+        var prompt = $@"Rewrite this in 2-3 simple sentences:
 
-Task: Rewrite the answer below in a clear, professional, and conversational tone.
-
-Guidelines:
-1. Keep the exact same information - do not add or remove facts
-2. Maintain all financial disclaimers and safety statements
-3. Use 2-3 sentences maximum
-4. Write in simple, friendly language
-5. Be professional but not robotic
-6. Do not use slang or overly casual language
-
-Original Answer:
 {answer}
 
-Your Rewritten Answer (2-3 sentences only):";
+Rewritten:";
 
         var request = new
         {
@@ -94,8 +65,9 @@ Your Rewritten Answer (2-3 sentences only):";
             stream = false,
             options = new
             {
-                temperature = 0.3,
-                top_p = 0.9
+                temperature = 0.1,
+                top_p = 0.9,
+                max_tokens = 150
             }
         };
 

@@ -14,6 +14,7 @@ public class AiOrchestratorService : IAiOrchestratorService
     private readonly IMemoryCache _cache;
     private readonly ILogger<AiOrchestratorService> _logger;
     private readonly IKnowledgeGapService _gapService;
+    private readonly IContextManager _contextManager;
 
     public AiOrchestratorService(
         IMutualFundRepository repository,
@@ -21,7 +22,8 @@ public class AiOrchestratorService : IAiOrchestratorService
         ILLMService llmService,
         IMemoryCache cache,
         ILogger<AiOrchestratorService> logger,
-        IKnowledgeGapService gapService)
+        IKnowledgeGapService gapService,
+        IContextManager contextManager)
     {
         _repository = repository;
         _embeddingService = embeddingService;
@@ -29,6 +31,7 @@ public class AiOrchestratorService : IAiOrchestratorService
         _cache = cache;
         _logger = logger;
         _gapService = gapService;
+        _contextManager = contextManager;
     }
 
     public async Task<ChatResponse> ProcessQueryAsync(string query, string userId)
@@ -41,16 +44,29 @@ public class AiOrchestratorService : IAiOrchestratorService
                 return CreateResponse("Please provide a valid query", "System", 0, "INVALID");
             }
 
-            // Check for opinion queries
+            // 2. Normalize input (fix typos)
+            query = InputNormalizer.NormalizeInput(query);
+            _logger.LogInformation("Normalized query: {Query}", query);
+
+            // 3. Resolve follow-up queries with context
+            var originalQuery = query;
+            query = _contextManager.ResolveFollowUp(query, userId);
+            
+            if (query != originalQuery)
+            {
+                _logger.LogInformation("Resolved follow-up: {Original} -> {Resolved}", originalQuery, query);
+            }
+
+            // 4. Check for opinion queries
             if (QueryNormalizer.IsOpinionQuery(query))
             {
                 return CreateResponse("I can provide general information, but I cannot give personal opinions or financial advice.", "Static", 1.0, "OPINION");
             }
 
-            // Normalize query (remove opinion phrases)
+            // 5. Normalize query (remove opinion phrases)
             query = QueryNormalizer.NormalizeQuery(query);
 
-            // 2. Detect intent
+            // 6. Detect intent
             var intent = IntentDetector.DetectIntent(query);
             _logger.LogInformation("Query: {Query}, Intent: {Intent}, UserId: {UserId}", query, intent, userId);
 
@@ -58,6 +74,9 @@ public class AiOrchestratorService : IAiOrchestratorService
             var staticResponse = HandleStaticIntent(intent);
             if (staticResponse != null)
                 return staticResponse;
+
+            // 4. Extract topic from query for context tracking
+            var topic = ExtractTopic(query);
 
             // 4. Check cache
             var cacheKey = $"query_{query.ToLower().Trim()}";
@@ -85,35 +104,42 @@ public class AiOrchestratorService : IAiOrchestratorService
                 // Log knowledge gap - no vector results
                 await _gapService.LogGapAsync(query, intent, 0);
                 
-                return CreateResponse("I don't have enough information.", "System", 0, intent);
+                return CreateResponse("I'm not sure I understand. Could you please clarify or rephrase your question? For example, you can ask about SIP, mutual funds, or investments.", "System", 0, intent);
             }
 
             // Check for low confidence and log gap
             if (topMatches[0].Score < 0.6)
             {
-                await _gapService.LogGapAsync(query, intent, topMatches[0].Score);
+                // Only log if not a useless query
+                if (!InputNormalizer.IsUselessQuery(query, topMatches[0].Score))
+                {
+                    await _gapService.LogGapAsync(query, intent, topMatches[0].Score);
+                }
+                
+                // If very low confidence, ask for clarification
+                if (topMatches[0].Score < 0.3)
+                {
+                    return CreateResponse("I'm not quite sure what you're asking about. Could you provide more details? For example, are you asking about SIP, mutual funds, NAV, or something else?", "System", topMatches[0].Score, intent);
+                }
+            }
+
+            // Store context for follow-up questions
+            if (!string.IsNullOrEmpty(topic))
+            {
+                _contextManager.SetLastTopic(userId, topic, intent);
             }
 
             // 9. Build context
             var context = BuildContext(topMatches);
 
-            // 10. For high confidence matches, rewrite answer with LLM for natural tone
+            // 10. For high confidence matches, return direct answer (no LLM rewriting)
             if (topMatches[0].Score > 0.8)
             {
-                var baseAnswer = topMatches[0].Data.Answer;
-                
-                // Combine top answers for richer context
-                var combinedAnswer = string.Join(" ", topMatches.Select(x => x.Data.Answer).Distinct());
-                
-                // Rewrite with LLM for natural tone
-                var rewrittenAnswer = await _llmService.RewriteAnswerAsync(combinedAnswer, query);
-                
-                // Clean the rewritten response
-                rewrittenAnswer = CleanResponse(rewrittenAnswer);
+                var directAnswer = topMatches[0].Data.Answer;
                 
                 // Add contextual prefix
                 var prefix = ResponseEnhancer.GetContextualPrefix(query);
-                var finalAnswer = prefix + rewrittenAnswer;
+                var finalAnswer = prefix + directAnswer;
                 
                 // Save to chat history
                 await _repository.SaveChatHistoryAsync(new Models.ChatHistory
@@ -132,11 +158,11 @@ public class AiOrchestratorService : IAiOrchestratorService
                     Response = finalAnswer,
                     ConfidenceScore = topMatches[0].Score,
                     Intent = intent,
-                    Source = "Database+LLM",
+                    Source = "Database",
                     CreatedDate = DateTime.UtcNow
                 });
 
-                var dbResponse = CreateResponse(finalAnswer, "Database+LLM", topMatches[0].Score, intent);
+                var dbResponse = CreateResponse(finalAnswer, "Database", topMatches[0].Score, intent);
                 
                 // Cache the response
                 var dbCacheOptions = new MemoryCacheEntryOptions
@@ -316,27 +342,49 @@ public class AiOrchestratorService : IAiOrchestratorService
 
     private string CleanResponse(string response)
     {
-        // Fix common LLM mistakes
-        response = response.Replace("SIPI", "SIP");
-        response = response.Replace("sipi", "SIP");
-        response = response.Replace("SIPIndications", "SIP");
-        response = response.Replace("languaire", "language");
-        response = response.Replace("slapg", "slang");
-        
-        // Remove prompt artifacts
-        if (response.Contains("STRICT RULE", StringComparison.OrdinalIgnoreCase))
+        // Remove common LLM artifacts
+        var cleanPatterns = new[]
         {
-            // Extract only the actual answer after the rules
-            var answerStart = response.IndexOf("Answer:", StringComparison.OrdinalIgnoreCase);
-            if (answerStart > 0)
+            "SIPI", "sipi", "SIPIndications", "SIPV", "sipv",
+            "languaire", "slapg", "Single-Issue Plan",
+            "Systematic Invested Plan Investment Vehicle"
+        };
+        
+        foreach (var pattern in cleanPatterns)
+        {
+            response = response.Replace(pattern, "SIP", StringComparison.OrdinalIgnoreCase);
+        }
+        
+        // Remove prompt artifacts and guidelines
+        var artifactKeywords = new[] 
+        { 
+            "STRICT RULE", "Guidelines:", "Task:", "Your Role:",
+            "professional financial content writer", "Keep the exact same information",
+            "Maintaine all", "Do not use slaing"
+        };
+        
+        foreach (var keyword in artifactKeywords)
+        {
+            if (response.Contains(keyword, StringComparison.OrdinalIgnoreCase))
             {
-                response = response.Substring(answerStart + 7).Trim();
+                // If response contains artifacts, try to extract clean answer
+                var sentences = response.Split(new[] { '.', '!', '?' }, StringSplitOptions.RemoveEmptyEntries);
+                var cleanSentences = sentences
+                    .Where(s => !artifactKeywords.Any(k => s.Contains(k, StringComparison.OrdinalIgnoreCase)))
+                    .Where(s => s.Length > 20) // Keep only substantial sentences
+                    .Take(3);
+                
+                if (cleanSentences.Any())
+                {
+                    response = string.Join(". ", cleanSentences).Trim() + ".";
+                }
             }
         }
         
-        // Remove greetings from rewritten responses
+        // Remove unwanted greetings
         if (response.StartsWith("Greetings!", StringComparison.OrdinalIgnoreCase) ||
-            response.StartsWith("Hello!", StringComparison.OrdinalIgnoreCase))
+            response.StartsWith("Hello!", StringComparison.OrdinalIgnoreCase) ||
+            response.StartsWith("As a professional", StringComparison.OrdinalIgnoreCase))
         {
             var sentences = response.Split(new[] { '.', '!', '?' }, StringSplitOptions.RemoveEmptyEntries);
             if (sentences.Length > 1)
@@ -349,15 +397,33 @@ public class AiOrchestratorService : IAiOrchestratorService
         if (response.Contains("banker", StringComparison.OrdinalIgnoreCase) || 
             response.Contains("advisor", StringComparison.OrdinalIgnoreCase))
         {
-            // Remove sentences containing these words
-            var sentences = response.Split('.').Where(s => 
+            var sentences = response.Split('.');
+            var filtered = sentences.Where(s => 
                 !s.Contains("banker", StringComparison.OrdinalIgnoreCase) && 
                 !s.Contains("advisor", StringComparison.OrdinalIgnoreCase)
             );
-            response = string.Join(".", sentences).Trim();
+            response = string.Join(".", filtered).Trim();
         }
         
-        return response;
+        return response.Trim();
+    }
+
+    private string ExtractTopic(string query)
+    {
+        // Extract main topic from query (simple keyword extraction)
+        var keywords = new[] { "SIP", "mutual fund", "investment", "NAV", "return", "risk" };
+        
+        foreach (var keyword in keywords)
+        {
+            if (query.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+            {
+                return keyword;
+            }
+        }
+        
+        // Return first meaningful word if no keyword found
+        var words = query.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return words.Length > 0 ? words[0] : string.Empty;
     }
 
     private ChatResponse CreateResponse(string answer, string source, double confidence, string intent)

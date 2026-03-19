@@ -20,6 +20,7 @@ builder.Services.AddScoped<IAiOrchestratorService, AiOrchestratorService>();
 builder.Services.AddScoped<IKnowledgeGapService, KnowledgeGapService>();
 builder.Services.AddSingleton<IQdrantService, QdrantService>();
 builder.Services.AddScoped<ISyncService, SyncService>();
+builder.Services.AddSingleton<IContextManager, ContextManager>();
 
 // Add memory cache
 builder.Services.AddMemoryCache();
