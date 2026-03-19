@@ -16,24 +16,24 @@ public class RewriteService : IRewriteService
 
     public async Task<string> RewriteAnswerAsync(string answer, string query)
     {
-        var prompt = $@"You are a professional financial assistant.
+        // Skip rewriting if answer is already clean and short
+        if (answer.Length < 200 && !answer.Contains("However") && !answer.Contains("Therefore"))
+        {
+            return answer;
+        }
 
-Rewrite the answer below in a clear, natural, and conversational tone.
-
-Rules:
-- Keep the meaning EXACTLY the same
-- Do NOT add new information
-- Keep it short (2–3 sentences)
-- Make it sound human and confident
-- Avoid repetition
-- Keep financial disclaimer if present
-
-Question: {query}
-
-Answer: {answer}
-
-Rewritten Answer:";
-
-        return await _llm.RewriteAnswerAsync(answer, query);
+        var rewritten = await _llm.RewriteAnswerAsync(answer, query);
+        
+        // If rewrite failed or added artifacts, return original
+        if (string.IsNullOrWhiteSpace(rewritten) || 
+            rewritten.Contains("Sure!") ||
+            rewritten.Contains("Here's") ||
+            rewritten.Contains("updated version") ||
+            rewritten.Length > answer.Length * 1.5)
+        {
+            return answer;
+        }
+        
+        return rewritten;
     }
 }

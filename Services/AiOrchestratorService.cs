@@ -443,6 +443,9 @@ public class AiOrchestratorService : IAiOrchestratorService
 
     private string CleanResponse(string response)
     {
+        if (string.IsNullOrWhiteSpace(response))
+            return response;
+
         // Remove common LLM artifacts
         var cleanPatterns = new[]
         {
@@ -456,12 +459,35 @@ public class AiOrchestratorService : IAiOrchestratorService
             response = response.Replace(pattern, "SIP", StringComparison.OrdinalIgnoreCase);
         }
         
+        // Remove dialogue artifacts (Cuxtomo, Miria, etc.)
+        if (response.Contains("Cuxtomo:", StringComparison.OrdinalIgnoreCase) ||
+            response.Contains("Miria:", StringComparison.OrdinalIgnoreCase) ||
+            response.Contains("Customer:", StringComparison.OrdinalIgnoreCase))
+        {
+            // Extract only the actual answer, skip dialogue
+            var lines = response.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+            var answerLines = lines.Where(l => 
+                !l.Contains("Cuxtomo:", StringComparison.OrdinalIgnoreCase) &&
+                !l.Contains("Miria:", StringComparison.OrdinalIgnoreCase) &&
+                !l.Contains("Customer:", StringComparison.OrdinalIgnoreCase) &&
+                !l.Contains("Good morning", StringComparison.OrdinalIgnoreCase) &&
+                !l.Contains("How may I help", StringComparison.OrdinalIgnoreCase) &&
+                l.Length > 20
+            ).ToList();
+            
+            if (answerLines.Any())
+            {
+                response = string.Join(" ", answerLines);
+            }
+        }
+        
         // Remove prompt artifacts and guidelines
         var artifactKeywords = new[] 
         { 
             "STRICT RULE", "Guidelines:", "Task:", "Your Role:",
             "professional financial content writer", "Keep the exact same information",
-            "Maintaine all", "Do not use slaing"
+            "Maintaine all", "Do not use slaing", "Here's an updated version",
+            "Sure! Here's", "updated version of the sentence"
         };
         
         foreach (var keyword in artifactKeywords)
@@ -473,6 +499,7 @@ public class AiOrchestratorService : IAiOrchestratorService
                 var cleanSentences = sentences
                     .Where(s => !artifactKeywords.Any(k => s.Contains(k, StringComparison.OrdinalIgnoreCase)))
                     .Where(s => s.Length > 20) // Keep only substantial sentences
+                    .Where(s => !s.Contains(":")) // Remove sentences with colons (likely prompts)
                     .Take(3);
                 
                 if (cleanSentences.Any())
@@ -485,6 +512,7 @@ public class AiOrchestratorService : IAiOrchestratorService
         // Remove unwanted greetings
         if (response.StartsWith("Greetings!", StringComparison.OrdinalIgnoreCase) ||
             response.StartsWith("Hello!", StringComparison.OrdinalIgnoreCase) ||
+            response.StartsWith("Good morning", StringComparison.OrdinalIgnoreCase) ||
             response.StartsWith("As a professional", StringComparison.OrdinalIgnoreCase))
         {
             var sentences = response.Split(new[] { '.', '!', '?' }, StringSplitOptions.RemoveEmptyEntries);

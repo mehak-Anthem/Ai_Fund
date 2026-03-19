@@ -6,19 +6,26 @@ public static class IntentDetector
     {
         query = query.ToLower();
 
-        // 1. QUESTION should be highest priority
-        if (query.Contains("what") || query.Contains("is") || query.Contains("how") || query.Contains("why") || query.Contains("when") || query.Contains("where"))
+        // 1. COMPARISON (high priority)
+        if (query.Contains("difference") || query.Contains("diff") || query.Contains(" vs ") || 
+            query.Contains("versus") || query.Contains("compare") || 
+            (query.Contains("between") && query.Contains(" and ")))
+            return "COMPARISON";
+
+        // 2. QUESTION should be highest priority
+        if (query.Contains("what") || query.Contains("is") || query.Contains("how") || 
+            query.Contains("why") || query.Contains("when") || query.Contains("where"))
             return "QUESTION";
 
-        // 2. ADVICE
+        // 3. ADVICE
         if (query.Contains("should") || query.Contains("best") || query.Contains("good") || query.Contains("recommend"))
             return "ADVICE";
 
-        // 3. GREETING (exact match only - LOW priority)
+        // 4. GREETING (exact match only - LOW priority)
         if (query.Trim() == "hi" || query.Trim() == "hello" || query.Trim() == "hey")
             return "GREETING";
 
-        // 4. CLOSING
+        // 5. CLOSING
         if (query.Contains("thank") || query.Contains("bye"))
             return "CLOSING";
 
