@@ -10,4 +10,9 @@ public interface IMutualFundRepository
     Task DeactivateKnowledgeAsync(int id);
     Task ActivateKnowledgeAsync(int id);
     Task UpdateKnowledgeVersionAsync(int id, int version);
+    Task<Models.KnowledgeGap?> GetKnowledgeGapByQuestionAsync(string question);
+    Task SaveKnowledgeGapAsync(Models.KnowledgeGap gap);
+    Task UpdateKnowledgeGapAsync(Models.KnowledgeGap gap);
+    Task<List<Models.KnowledgeGap>> GetTopKnowledgeGapsAsync(int count);
+    Task AddKnowledgeFromGapAsync(string question, string answer);
 }

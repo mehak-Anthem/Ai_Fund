@@ -177,4 +177,136 @@ public class MutualFundRepository : IMutualFundRepository
             }
         }
     }
+
+    public async Task<Models.KnowledgeGap?> GetKnowledgeGapByQuestionAsync(string question)
+    {
+        using (SqlConnection conn = new SqlConnection(_connectionString))
+        {
+            var query = "SELECT Id, Question, DetectedIntent, ConfidenceScore, OccurrenceCount, LastAsked, Status, SuggestedAnswer, CreatedAt FROM KnowledgeGaps WHERE Question = @Question";
+            
+            using (SqlCommand cmd = new SqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("@Question", question);
+                await conn.OpenAsync();
+                
+                using (var reader = await cmd.ExecuteReaderAsync())
+                {
+                    if (await reader.ReadAsync())
+                    {
+                        return new Models.KnowledgeGap
+                        {
+                            Id = reader.GetInt32(0),
+                            Question = reader.GetString(1),
+                            DetectedIntent = reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
+                            ConfidenceScore = reader.IsDBNull(3) ? 0 : reader.GetDouble(3),
+                            OccurrenceCount = reader.GetInt32(4),
+                            LastAsked = reader.GetDateTime(5),
+                            Status = reader.GetString(6),
+                            SuggestedAnswer = reader.IsDBNull(7) ? null : reader.GetString(7),
+                            CreatedAt = reader.GetDateTime(8)
+                        };
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    public async Task SaveKnowledgeGapAsync(Models.KnowledgeGap gap)
+    {
+        using (SqlConnection conn = new SqlConnection(_connectionString))
+        {
+            var query = @"INSERT INTO KnowledgeGaps (Question, DetectedIntent, ConfidenceScore, OccurrenceCount, LastAsked, Status, CreatedAt) 
+                         VALUES (@Question, @DetectedIntent, @ConfidenceScore, @OccurrenceCount, @LastAsked, @Status, @CreatedAt)";
+            
+            using (SqlCommand cmd = new SqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("@Question", gap.Question);
+                cmd.Parameters.AddWithValue("@DetectedIntent", gap.DetectedIntent);
+                cmd.Parameters.AddWithValue("@ConfidenceScore", gap.ConfidenceScore);
+                cmd.Parameters.AddWithValue("@OccurrenceCount", gap.OccurrenceCount);
+                cmd.Parameters.AddWithValue("@LastAsked", gap.LastAsked);
+                cmd.Parameters.AddWithValue("@Status", gap.Status);
+                cmd.Parameters.AddWithValue("@CreatedAt", gap.CreatedAt);
+                
+                await conn.OpenAsync();
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+    }
+
+    public async Task UpdateKnowledgeGapAsync(Models.KnowledgeGap gap)
+    {
+        using (SqlConnection conn = new SqlConnection(_connectionString))
+        {
+            var query = @"UPDATE KnowledgeGaps SET OccurrenceCount = @OccurrenceCount, LastAsked = @LastAsked, Status = @Status, SuggestedAnswer = @SuggestedAnswer WHERE Id = @Id";
+            
+            using (SqlCommand cmd = new SqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("@Id", gap.Id);
+                cmd.Parameters.AddWithValue("@OccurrenceCount", gap.OccurrenceCount);
+                cmd.Parameters.AddWithValue("@LastAsked", gap.LastAsked);
+                cmd.Parameters.AddWithValue("@Status", gap.Status);
+                cmd.Parameters.AddWithValue("@SuggestedAnswer", (object?)gap.SuggestedAnswer ?? DBNull.Value);
+                
+                await conn.OpenAsync();
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+    }
+
+    public async Task<List<Models.KnowledgeGap>> GetTopKnowledgeGapsAsync(int count)
+    {
+        var result = new List<Models.KnowledgeGap>();
+        
+        using (SqlConnection conn = new SqlConnection(_connectionString))
+        {
+            var query = $@"SELECT TOP {count} Id, Question, DetectedIntent, ConfidenceScore, OccurrenceCount, LastAsked, Status, SuggestedAnswer, CreatedAt 
+                          FROM KnowledgeGaps 
+                          WHERE Status != 'Resolved' 
+                          ORDER BY OccurrenceCount DESC, LastAsked DESC";
+            
+            using (SqlCommand cmd = new SqlCommand(query, conn))
+            {
+                await conn.OpenAsync();
+                using (var reader = await cmd.ExecuteReaderAsync())
+                {
+                    while (await reader.ReadAsync())
+                    {
+                        result.Add(new Models.KnowledgeGap
+                        {
+                            Id = reader.GetInt32(0),
+                            Question = reader.GetString(1),
+                            DetectedIntent = reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
+                            ConfidenceScore = reader.IsDBNull(3) ? 0 : reader.GetDouble(3),
+                            OccurrenceCount = reader.GetInt32(4),
+                            LastAsked = reader.GetDateTime(5),
+                            Status = reader.GetString(6),
+                            SuggestedAnswer = reader.IsDBNull(7) ? null : reader.GetString(7),
+                            CreatedAt = reader.GetDateTime(8)
+                        });
+                    }
+                }
+            }
+        }
+        return result;
+    }
+
+    public async Task AddKnowledgeFromGapAsync(string question, string answer)
+    {
+        using (SqlConnection conn = new SqlConnection(_connectionString))
+        {
+            var query = @"INSERT INTO MutualFundKnowledge (Question, Answer, Version, IsActive) 
+                         VALUES (@Question, @Answer, 1, 1)";
+            
+            using (SqlCommand cmd = new SqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("@Question", question);
+                cmd.Parameters.AddWithValue("@Answer", answer);
+                
+                await conn.OpenAsync();
+                await cmd.ExecuteNonQueryAsync();
+            }
+        }
+    }
 }

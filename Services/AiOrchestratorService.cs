@@ -13,19 +13,22 @@ public class AiOrchestratorService : IAiOrchestratorService
     private readonly ILLMService _llmService;
     private readonly IMemoryCache _cache;
     private readonly ILogger<AiOrchestratorService> _logger;
+    private readonly IKnowledgeGapService _gapService;
 
     public AiOrchestratorService(
         IMutualFundRepository repository,
         IEmbeddingService embeddingService,
         ILLMService llmService,
         IMemoryCache cache,
-        ILogger<AiOrchestratorService> logger)
+        ILogger<AiOrchestratorService> logger,
+        IKnowledgeGapService gapService)
     {
         _repository = repository;
         _embeddingService = embeddingService;
         _llmService = llmService;
         _cache = cache;
         _logger = logger;
+        _gapService = gapService;
     }
 
     public async Task<ChatResponse> ProcessQueryAsync(string query, string userId)
@@ -78,7 +81,17 @@ public class AiOrchestratorService : IAiOrchestratorService
             if (!topMatches.Any())
             {
                 _logger.LogWarning("No matches found for query: {Query}", query);
+                
+                // Log knowledge gap - no vector results
+                await _gapService.LogGapAsync(query, intent, 0);
+                
                 return CreateResponse("I don't have enough information.", "System", 0, intent);
+            }
+
+            // Check for low confidence and log gap
+            if (topMatches[0].Score < 0.6)
+            {
+                await _gapService.LogGapAsync(query, intent, topMatches[0].Score);
             }
 
             // 9. Build context

@@ -17,6 +17,9 @@ builder.Services.AddScoped<IMutualFundService, MutualFundService>();
 builder.Services.AddSingleton<IEmbeddingService, NomicEmbeddingService>();
 builder.Services.AddSingleton<ILLMService, OllamaLLMService>();
 builder.Services.AddScoped<IAiOrchestratorService, AiOrchestratorService>();
+builder.Services.AddScoped<IKnowledgeGapService, KnowledgeGapService>();
+builder.Services.AddSingleton<IQdrantService, QdrantService>();
+builder.Services.AddScoped<ISyncService, SyncService>();
 
 // Add memory cache
 builder.Services.AddMemoryCache();
