@@ -16,6 +16,7 @@ public interface ISmartGuidanceService
     string GenerateReturnsForAmount(int monthlyAmount, int years);
     string GenerateFDReturns(int amount, int years);
     string GenerateUniversalReturns(string investmentType, int amount, int years);
+    string CompareInvestments(string type1, string type2, int amount, int years);
 }
 
 public class SmartGuidanceService : ISmartGuidanceService
@@ -139,6 +140,60 @@ Estimated profit: ₹{profit:N0}
 Risk level: {returns.Risk}
 Type: {returns.Type}
 {(returns.Type == "Market-linked" ? "Returns may vary based on market performance." : "Returns are relatively stable.")}";
+    }
+    
+    public string CompareInvestments(string type1, string type2, int amount, int years)
+    {
+        // Universal investment data
+        var investmentData = new Dictionary<string, (double Rate, string Risk, string Type)>
+        {
+            { "FD", (0.065, "Low", "Fixed") },
+            { "Fixed Deposit", (0.065, "Low", "Fixed") },
+            { "SIP", (0.12, "Medium", "Market-linked") },
+            { "Mutual Fund", (0.12, "Medium", "Market-linked") },
+            { "Gold", (0.08, "Low-Medium", "Commodity") },
+            { "Stock", (0.15, "High", "Market-linked") },
+            { "Stocks", (0.15, "High", "Market-linked") },
+            { "PPF", (0.071, "Very Low", "Government-backed") },
+            { "NPS", (0.10, "Medium", "Pension") },
+            { "Bond", (0.07, "Low", "Fixed income") },
+            { "Bonds", (0.07, "Low", "Fixed income") },
+            { "Real Estate", (0.09, "Medium", "Property") }
+        };
+        
+        // Get data for both investment types
+        if (!investmentData.TryGetValue(type1, out var returns1))
+        {
+            returns1 = (0.10, "Medium", "General");
+        }
+        
+        if (!investmentData.TryGetValue(type2, out var returns2))
+        {
+            returns2 = (0.10, "Medium", "General");
+        }
+        
+        var profit1 = amount * (Math.Pow(1 + returns1.Rate, years) - 1);
+        var profit2 = amount * (Math.Pow(1 + returns2.Rate, years) - 1);
+        var difference = Math.Abs(profit2 - profit1);
+        var better = profit1 > profit2 ? type1 : type2;
+        var betterProfit = Math.Max(profit1, profit2);
+        
+        return $@"Comparison for ₹{amount:N0} invested for {years} year{(years > 1 ? "s" : "")}:
+
+📊 {type1}:
+• Profit: ₹{profit1:N0} ({returns1.Rate * 100:F1}%)
+• Risk: {returns1.Risk}
+• Type: {returns1.Type}
+
+📊 {type2}:
+• Profit: ₹{profit2:N0} ({returns2.Rate * 100:F1}%)
+• Risk: {returns2.Risk}
+• Type: {returns2.Type}
+
+💡 Difference: ₹{difference:N0} more with {better}
+
+🎯 Tip:
+Choose based on your risk appetite and investment goals.";
     }
 
     public string GenerateFDReturns(int amount, int years)

@@ -167,18 +167,6 @@ public class AiOrchestratorService : IAiOrchestratorService
                 _logger.LogInformation("Skipping static ADVICE - will use smart guidance or structured answer");
             }
 
-            // 7. Handle comparison queries (NEW - before ResponseFormatter check)
-            if (isComparison)
-            {
-                // Extract entities if not already done
-                var entities = _comparisonService.ExtractEntities(query);
-                if (entities.HasValue)
-                {
-                    _contextManager.SaveLastEntities(userId, entities.Value.Entity1, entities.Value.Entity2);
-                }
-                // Let it continue to RAG+LLM for proper comparison answer
-            }
-
             // 8. Handle old comparison queries (keep for backward compatibility)
             if (ResponseFormatter.IsComparisonQuery(query))
             {
@@ -195,8 +183,47 @@ public class AiOrchestratorService : IAiOrchestratorService
                 return CreateResponse(ResponseFormatter.HandleGuidance(query), "Static", 1.0, "GUIDANCE");
             }
 
-            // 4. Extract topic from query for context tracking
+            // Extract topic and rich context BEFORE they are used
             var topic = ExtractTopic(query);
+            var richContext = _contextManager.GetRichContext(userId);
+
+            // 7. Handle comparison queries with returns/profit
+            if (isComparison)
+            {
+                // Check if it's a returns/profit comparison
+                if (_smartGuidanceService.IsReturnsQuery(originalQuery) || 
+                    originalQuery.ToLower().Contains("profit") ||
+                    originalQuery.ToLower().Contains("difference"))
+                {
+                    var allTypes = _comparisonService.ExtractAllEntities(query);
+                    var queryAmount = _smartGuidanceService.ExtractAmount(originalQuery);
+                    var years = _smartGuidanceService.ExtractYears(originalQuery);
+                    
+                    if (queryAmount == 0 && richContext != null)
+                    {
+                        queryAmount = _smartGuidanceService.ExtractAmount(richContext.LastUserQuery);
+                    }
+                    
+                    if (years == 0)
+                        years = 1;
+                    
+                    if (allTypes.Count >= 2 && queryAmount > 0)
+                    {
+                        var comparison = _smartGuidanceService.CompareInvestments(allTypes[0], allTypes[1], queryAmount, years);
+                        var compEntities = _comparisonService.ExtractAllEntities(originalQuery);
+                        _contextManager.SaveRichContext(userId, originalQuery, comparison, topic, compEntities);
+                        return CreateResponse(comparison, "SmartGuidance", 1.0, "COMPARISON");
+                    }
+                }
+                
+                // Extract entities if not already done
+                var entities = _comparisonService.ExtractEntities(query);
+                if (entities.HasValue)
+                {
+                    _contextManager.SaveLastEntities(userId, entities.Value.Entity1, entities.Value.Entity2);
+                }
+                // Let it continue to RAG+LLM for proper comparison answer
+            }
 
             // 4. Check cache (skip cache for expansion queries)
             var cacheKey = $"query_{query.ToLower().Trim()}";
@@ -251,9 +278,6 @@ public class AiOrchestratorService : IAiOrchestratorService
 
             // 9. Build context
             var context = BuildContext(topMatches);
-            
-            // Get rich context for reuse throughout the method
-            var richContext = _contextManager.GetRichContext(userId);
 
             // 9.5. Check for personal query (PRIORITY 1)
             if (isPersonalQuery)
