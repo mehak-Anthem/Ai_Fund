@@ -21,6 +21,10 @@ builder.Services.AddScoped<IKnowledgeGapService, KnowledgeGapService>();
 builder.Services.AddSingleton<IQdrantService, QdrantService>();
 builder.Services.AddScoped<ISyncService, SyncService>();
 builder.Services.AddSingleton<IContextManager, ContextManager>();
+builder.Services.AddScoped<IRewriteService, RewriteService>();
+builder.Services.AddSingleton<IPersonalityService, PersonalityService>();
+builder.Services.AddSingleton<IExpansionService, ExpansionService>();
+builder.Services.AddSingleton<IComparisonService, ComparisonService>();
 
 // Add memory cache
 builder.Services.AddMemoryCache();

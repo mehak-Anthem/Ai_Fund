@@ -15,6 +15,10 @@ public class AiOrchestratorService : IAiOrchestratorService
     private readonly ILogger<AiOrchestratorService> _logger;
     private readonly IKnowledgeGapService _gapService;
     private readonly IContextManager _contextManager;
+    private readonly IRewriteService _rewriteService;
+    private readonly IPersonalityService _personalityService;
+    private readonly IExpansionService _expansionService;
+    private readonly IComparisonService _comparisonService;
 
     public AiOrchestratorService(
         IMutualFundRepository repository,
@@ -23,7 +27,11 @@ public class AiOrchestratorService : IAiOrchestratorService
         IMemoryCache cache,
         ILogger<AiOrchestratorService> logger,
         IKnowledgeGapService gapService,
-        IContextManager contextManager)
+        IContextManager contextManager,
+        IRewriteService rewriteService,
+        IPersonalityService personalityService,
+        IExpansionService expansionService,
+        IComparisonService comparisonService)
     {
         _repository = repository;
         _embeddingService = embeddingService;
@@ -32,6 +40,10 @@ public class AiOrchestratorService : IAiOrchestratorService
         _logger = logger;
         _gapService = gapService;
         _contextManager = contextManager;
+        _rewriteService = rewriteService;
+        _personalityService = personalityService;
+        _expansionService = expansionService;
+        _comparisonService = comparisonService;
     }
 
     public async Task<ChatResponse> ProcessQueryAsync(string query, string userId)
@@ -50,9 +62,43 @@ public class AiOrchestratorService : IAiOrchestratorService
 
             // 3. Resolve follow-up queries with context
             var originalQuery = query;
-            query = _contextManager.ResolveFollowUp(query, userId);
+            var isExpansion = _expansionService.IsExpansionQuery(query);
+            var isComparison = _comparisonService.IsComparisonQuery(query);
             
-            if (query != originalQuery)
+            // Handle comparison mode
+            if (isComparison)
+            {
+                // Try to extract entities from current query
+                var entities = _comparisonService.ExtractEntities(query);
+                if (entities.HasValue)
+                {
+                    // Save entities for future reference
+                    _contextManager.SaveLastEntities(userId, entities.Value.Entity1, entities.Value.Entity2);
+                    _logger.LogInformation("Comparison entities saved: {E1} vs {E2}", entities.Value.Entity1, entities.Value.Entity2);
+                }
+                else
+                {
+                    // Try to resolve using context (e.g., "difference between both")
+                    query = _comparisonService.ResolveComparison(query, userId, _contextManager);
+                    _logger.LogInformation("Comparison resolved: {Original} -> {Resolved}", originalQuery, query);
+                }
+            }
+            // Handle expansion mode
+            else if (isExpansion)
+            {
+                var lastTopic = _contextManager.GetLastTopic(userId);
+                if (!string.IsNullOrEmpty(lastTopic))
+                {
+                    query = _expansionService.ExpandQuery(query, lastTopic);
+                    _logger.LogInformation("Expansion mode: {Original} -> {Expanded}", originalQuery, query);
+                }
+            }
+            else
+            {
+                query = _contextManager.ResolveFollowUp(query, userId);
+            }
+            
+            if (query != originalQuery && !isExpansion && !isComparison)
             {
                 _logger.LogInformation("Resolved follow-up: {Original} -> {Resolved}", originalQuery, query);
             }
@@ -70,17 +116,49 @@ public class AiOrchestratorService : IAiOrchestratorService
             var intent = IntentDetector.DetectIntent(query);
             _logger.LogInformation("Query: {Query}, Intent: {Intent}, UserId: {UserId}", query, intent, userId);
 
+            // 7. Handle comparison queries (NEW - before ResponseFormatter check)
+            if (isComparison)
+            {
+                // Extract entities if not already done
+                var entities = _comparisonService.ExtractEntities(query);
+                if (entities.HasValue)
+                {
+                    _contextManager.SaveLastEntities(userId, entities.Value.Entity1, entities.Value.Entity2);
+                }
+                // Let it continue to RAG+LLM for proper comparison answer
+            }
+
+            // 8. Handle old comparison queries (keep for backward compatibility)
+            if (ResponseFormatter.IsComparisonQuery(query))
+            {
+                var comparisonAnswer = ResponseFormatter.HandleComparison(query);
+                if (!string.IsNullOrEmpty(comparisonAnswer))
+                {
+                    return CreateResponse(comparisonAnswer, "Static", 1.0, "COMPARISON");
+                }
+            }
+
+            // 8. Handle guidance queries
+            if (ResponseFormatter.IsGuidanceQuery(query))
+            {
+                return CreateResponse(ResponseFormatter.HandleGuidance(query), "Static", 1.0, "GUIDANCE");
+            }
+
             // 3. Handle static intents
             var staticResponse = HandleStaticIntent(intent);
             if (staticResponse != null)
+            {
+                // Save context even for static responses
+                _contextManager.SaveContext(userId, query, intent, query);
                 return staticResponse;
+            }
 
             // 4. Extract topic from query for context tracking
             var topic = ExtractTopic(query);
 
-            // 4. Check cache
+            // 4. Check cache (skip cache for expansion queries)
             var cacheKey = $"query_{query.ToLower().Trim()}";
-            if (_cache.TryGetValue<ChatResponse>(cacheKey, out var cachedResponse))
+            if (!isExpansion && _cache.TryGetValue<ChatResponse>(cacheKey, out var cachedResponse))
             {
                 _logger.LogInformation("Cache hit for query: {Query}", query);
                 return cachedResponse;
@@ -126,20 +204,26 @@ public class AiOrchestratorService : IAiOrchestratorService
             // Store context for follow-up questions
             if (!string.IsNullOrEmpty(topic))
             {
-                _contextManager.SetLastTopic(userId, topic, intent);
+                _contextManager.SaveContext(userId, topic, intent, originalQuery);
             }
 
             // 9. Build context
             var context = BuildContext(topMatches);
 
-            // 10. For high confidence matches, return direct answer (no LLM rewriting)
-            if (topMatches[0].Score > 0.8)
+            // 10. For high confidence matches AND not expansion mode, return direct answer
+            if (topMatches[0].Score > 0.8 && !isExpansion)
             {
                 var directAnswer = topMatches[0].Data.Answer;
                 
                 // Add contextual prefix
                 var prefix = ResponseEnhancer.GetContextualPrefix(query);
                 var finalAnswer = prefix + directAnswer;
+                
+                // Format response
+                finalAnswer = ResponseFormatter.FormatResponse(finalAnswer);
+                
+                // Save answer for repetition detection
+                _contextManager.SaveLastAnswer(userId, finalAnswer);
                 
                 // Save to chat history
                 await _repository.SaveChatHistoryAsync(new Models.ChatHistory
@@ -162,20 +246,20 @@ public class AiOrchestratorService : IAiOrchestratorService
                     CreatedDate = DateTime.UtcNow
                 });
 
-                var dbResponse = CreateResponse(finalAnswer, "Database", topMatches[0].Score, intent);
+                var dbResponse2 = CreateResponse(finalAnswer, "Database", topMatches[0].Score, intent);
                 
-                // Cache the response
-                var dbCacheOptions = new MemoryCacheEntryOptions
+                // Cache the response (skip cache for expansion queries)
+                var dbCacheOptions2 = new MemoryCacheEntryOptions
                 {
                     AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30)
                 };
-                CacheExtensions.Set(_cache, cacheKey, dbResponse, dbCacheOptions);
+                CacheExtensions.Set(_cache, cacheKey, dbResponse2, dbCacheOptions2);
                 
-                return dbResponse;
+                return dbResponse2;
             }
 
-            // 11. For simple definitions with high score, return direct answer
-            if (intent == "DEFINITION" && topMatches[0].Score > 0.8)
+            // 11. For simple definitions with high score AND not expansion, return direct answer
+            if (intent == "DEFINITION" && topMatches[0].Score > 0.8 && !isExpansion)
             {
                 var directAnswer = topMatches[0].Data.Answer;
                 var response = CreateResponse(directAnswer, "Database", topMatches[0].Score, intent);
@@ -207,7 +291,11 @@ public class AiOrchestratorService : IAiOrchestratorService
                 CreatedDate = DateTime.UtcNow
             });
             
-            var aiResponse = await _llmService.AskLLMAsync(context, query, chatHistory);
+            // Check for repetition and force expansion
+            var lastAnswer = _contextManager.GetLastAnswer(userId);
+            var forceExpansion = isExpansion || (!string.IsNullOrEmpty(lastAnswer) && context.Contains(lastAnswer));
+            
+            var aiResponse = await _llmService.AskLLMAsync(context, query, chatHistory, forceExpansion);
 
             // Add contextual prefix for natural conversation
             var responsePrefix = ResponseEnhancer.GetContextualPrefix(query);
@@ -215,6 +303,18 @@ public class AiOrchestratorService : IAiOrchestratorService
 
             // Clean response
             aiResponse = CleanResponse(aiResponse);
+            
+            // Format response
+            aiResponse = ResponseFormatter.FormatResponse(aiResponse);
+            
+            // Rewrite for natural tone
+            aiResponse = await _rewriteService.RewriteAnswerAsync(aiResponse, query);
+            
+            // Apply personality layer
+            aiResponse = _personalityService.ApplyPersonality(aiResponse);
+            
+            // Save answer for repetition detection
+            _contextManager.SaveLastAnswer(userId, aiResponse);
 
             // 12. Apply guardrails
             var guardedResponse = ApplyGuardrails(aiResponse);
@@ -291,7 +391,7 @@ public class AiOrchestratorService : IAiOrchestratorService
                 {
                     var embedding = JsonSerializer.Deserialize<float[]>(x.Embedding);
                     if (embedding == null || embedding.Length == 0)
-                        return (Data: (KnowledgeData?)null, Score: 0.0);
+                        return ((KnowledgeData?)null, Score: 0.0);
 
                     var score = VectorHelper.CosineSimilarity(queryEmbedding, embedding);
                     
@@ -306,10 +406,11 @@ public class AiOrchestratorService : IAiOrchestratorService
                 }
                 catch
                 {
-                    return (Data: (KnowledgeData?)null, Score: 0.0);
+                    return ((KnowledgeData?)null, Score: 0.0);
                 }
             })
-            .Where(x => x.Data != null && x.Score > 0.65)
+            .Where(x => x.Item1 != null && x.Score > 0.65)
+            .Select(x => (Data: x.Item1!, Score: x.Score))
             .OrderByDescending(x => x.Score)
             .Take(3)
             .ToList();
