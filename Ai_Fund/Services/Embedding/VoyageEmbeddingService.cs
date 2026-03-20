@@ -35,26 +35,34 @@ public class VoyageEmbeddingService : IEmbeddingService
     {
         try
         {
+            var keyHint = string.IsNullOrEmpty(_apiKey) ? "MISSING" : _apiKey.Length > 5 ? _apiKey.Substring(0, 5) + "..." : "TOO_SHORT";
+            _logger.LogInformation(">>> VOYAGE START: Model={Model}, KeyHint={KeyHint}, URL={URL}", _model, keyHint, "https://api.voyageai.com/v1/embeddings");
+
             if (string.IsNullOrEmpty(_apiKey))
             {
-                _logger.LogWarning("Voyage API Key is missing! Returning zero-vector fail-safe.");
+                _logger.LogError(">>> VOYAGE FAIL: API Key is NULL or EMPTY. Check Render Env Vars.");
                 return new float[1024];
             }
 
-            // Drop-in replacement logic as suggested
             var payload = new
             {
                 input = text,
                 model = _model
             };
 
-            var response = await _httpClient.PostAsJsonAsync("https://api.voyageai.com/v1/embeddings", payload);
+            var options = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+            var jsonPayload = JsonSerializer.Serialize(payload, options);
+            _logger.LogInformation(">>> VOYAGE PAYLOAD: {Payload}", jsonPayload);
+
+            var response = await _httpClient.PostAsJsonAsync("https://api.voyageai.com/v1/embeddings", payload, options);
             var content = await response.Content.ReadAsStringAsync();
+            
+            _logger.LogInformation(">>> VOYAGE RESPONSE ({Status}): {Content}", response.StatusCode, content);
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogError("Voyage API failed: {Status} - {Error}", response.StatusCode, content);
-                return new float[1024]; // Fail-safe
+                _logger.LogError(">>> VOYAGE FAIL: Status {Status}. Response: {Content}", response.StatusCode, content);
+                return new float[1024]; 
             }
 
             var result = JsonSerializer.Deserialize<VoyageResponse>(content, new JsonSerializerOptions 
@@ -64,19 +72,20 @@ public class VoyageEmbeddingService : IEmbeddingService
 
             if (result?.Data == null || result.Data.Count == 0 || result.Data[0].Embedding == null)
             {
-                _logger.LogWarning("Voyage returned empty or malformed data: {Content}", content);
+                _logger.LogWarning(">>> VOYAGE FAIL: Malformed JSON or empty data.");
                 return new float[1024];
             }
 
-            _logger.LogInformation("Successfully generated {Count}d embedding via Voyage AI", result.Data[0].Embedding.Count());
+            _logger.LogInformation(">>> VOYAGE SUCCESS: Generated {Count}d embedding", result.Data[0].Embedding.Count());
             return result.Data[0].Embedding;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Voyage AI EXCEPTION: {Message}", ex.Message);
-            return new float[1024]; // Fail-safe
+            _logger.LogError(ex, ">>> VOYAGE EXCEPTION: {Message}", ex.Message);
+            return new float[1024];
         }
     }
+
 }
 
 public class VoyageResponse

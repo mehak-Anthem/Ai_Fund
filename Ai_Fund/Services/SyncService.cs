@@ -32,7 +32,7 @@ public class SyncService : ISyncService
         try
         {
             _logger.LogInformation("Starting sync from SQL to Qdrant...");
-            _logger.LogInformation("MIGRATION: Deleting and recreating collection for 384-dimension change...");
+            _logger.LogInformation(">>> MIGRATION: Deleting and recreating collection for 1024-dimension (Voyage AI) change...");
 
             // Delete existing collection to change dimensions
             await _qdrantService.DeleteCollectionAsync();
@@ -45,9 +45,7 @@ public class SyncService : ISyncService
 
             _logger.LogInformation("Found {Count} active knowledge entries to sync", allKnowledge.Count);
 
-            int syncedCount = 0;
-            int skippedCount = 0;
-
+            int total = allKnowledge.Count;
             foreach (var item in allKnowledge)
             {
                 try
@@ -55,16 +53,24 @@ public class SyncService : ISyncService
                     // Skip if content is empty
                     if (string.IsNullOrWhiteSpace(item.Answer))
                     {
-                        _logger.LogWarning("Skipping ID {Id}: Empty content", item.Id);
+                        _logger.LogWarning(">>> SYNC SKIP (ID={Id}): Empty answer.", item.Id);
                         skippedCount++;
                         continue;
                     }
 
-                    // ALWAYS regenerate embedding because we switched models (from Nomic/Ollama to HuggingFace)
-                    _logger.LogInformation("Generating fresh HuggingFace embedding for ID {Id}", item.Id);
+                    _logger.LogInformation(">>> SYNC ITEM ({Current}/{Total}): ID={Id}, Text='{Text}...' ", syncedCount + skippedCount + 1, total, item.Id, item.Question.Substring(0, Math.Min(50, item.Question.Length)));
+
+                    // ALWAYS regenerate embedding for Voyage (1024d)
                     var normalizedQuestion = TextNormalizer.Normalize(item.Question);
                     var embedding = await _embeddingService.GenerateEmbeddingAsync(normalizedQuestion);
                     
+                    if (embedding.All(v => v == 0))
+                    {
+                        _logger.LogWarning(">>> SYNC FAIL (ID={Id}): Embedding service returned zero-vector. Check Voyage connectivity.");
+                        skippedCount++;
+                        continue;
+                    }
+
                     // Save fresh embedding back to SQL
                     var embeddingJson = System.Text.Json.JsonSerializer.Serialize(embedding);
                     await _repository.UpdateEmbeddingAsync(item.Id, embeddingJson);
@@ -81,19 +87,19 @@ public class SyncService : ISyncService
                     await _qdrantService.UpsertAsync(item.Id, embedding, item.Answer, metadata);
                     syncedCount++;
 
-                    _logger.LogDebug("Synced ID {Id}: {Question}", item.Id, item.Question);
+                    _logger.LogInformation(">>> SYNC SUCCESS (ID={Id})", item.Id);
                     
-                    // Add a small delay to avoid hitting HuggingFace rate limits
-                    await Task.Delay(500);
+                    // Add a small delay to avoid hitting Voyage rate limits (bulk)
+                    await Task.Delay(200);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error syncing knowledge ID {Id}", item.Id);
+                    _logger.LogError(ex, ">>> SYNC EXCEPTION (ID={Id}): {Message}", item.Id, ex.Message);
                     skippedCount++;
                 }
             }
 
-            _logger.LogInformation("✅ Sync completed: {Synced} synced, {Skipped} skipped", syncedCount, skippedCount);
+            _logger.LogInformation(">>> SYNC FINISHED: {Synced} synced, {Skipped} skipped to Qdrant Cloud (1024d).", syncedCount, skippedCount);
         }
         catch (Exception ex)
         {
