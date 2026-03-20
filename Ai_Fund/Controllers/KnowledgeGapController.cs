@@ -125,9 +125,9 @@ public class KnowledgeGapController : ControllerBase
             var normalizedQuery = TextNormalizer.Normalize(query);
             var embedding = await _embeddingService.GenerateEmbeddingAsync(normalizedQuery);
 
-            // Search Qdrant
+            // Search Qdrant with very low threshold for debugging
             var results = await qdrantService.SearchAsync(embedding, limit: 5);
-
+            
             return Ok(new
             {
                 Query = query,

@@ -122,13 +122,14 @@ public class QdrantService : IQdrantService
 
     public async Task<List<QdrantSearchResult>> SearchAsync(float[] queryVector, int limit = 3)
     {
-        try
-        {
+            if (queryVector == null || queryVector.Length == 0)
+                throw new ArgumentException("Query vector cannot be empty");
+
             var searchResult = await _client.SearchAsync(
                 collectionName: _collectionName,
                 vector: queryVector,
                 limit: (ulong)limit,
-                scoreThreshold: 0.6f
+                scoreThreshold: 0.3f
             );
 
             return searchResult.Select(r => new QdrantSearchResult

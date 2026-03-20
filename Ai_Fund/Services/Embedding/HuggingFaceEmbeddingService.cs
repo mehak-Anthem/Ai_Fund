@@ -86,15 +86,18 @@ public class HuggingFaceEmbeddingService : IEmbeddingService
             
             if (embeddings.Count == 0)
             {
-                _logger.LogWarning("HuggingFace returned empty or unexpected format: {Raw}", json.GetRawText());
+                var raw = json.GetRawText();
+                _logger.LogWarning("HuggingFace returned empty or unexpected format: {Raw}", raw);
+                throw new Exception($"HuggingFace returned invalid embedding format. Raw response: {raw}");
             }
             
+            _logger.LogInformation("Generated embedding with {Count} dimensions", embeddings.Count);
             return embeddings.ToArray();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error generating embedding via HuggingFace");
-            return Array.Empty<float>();
+            throw; // Rethrow so the caller knows it failed
         }
     }
 }
