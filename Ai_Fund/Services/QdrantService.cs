@@ -122,6 +122,8 @@ public class QdrantService : IQdrantService
 
     public async Task<List<QdrantSearchResult>> SearchAsync(float[] queryVector, int limit = 3)
     {
+        try
+        {
             if (queryVector == null || queryVector.Length == 0)
                 throw new ArgumentException("Query vector cannot be empty");
 
