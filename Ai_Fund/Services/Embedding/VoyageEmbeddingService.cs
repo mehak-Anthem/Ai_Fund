@@ -36,20 +36,18 @@ public class VoyageEmbeddingService : IEmbeddingService
         {
             if (string.IsNullOrEmpty(_apiKey))
             {
-                return new float[1024]; // Fail-safe
+                _logger.LogWarning("Voyage API Key is missing! Returning zero-vector fail-safe.");
+                return new float[1024];
             }
 
-            var request = new
+            // Drop-in replacement logic as suggested
+            var payload = new
             {
-                input = new[] { text },
+                input = text,
                 model = _model
             };
 
-            var httpRequest = new HttpRequestMessage(HttpMethod.Post, "https://api.voyageai.com/v1/embeddings");
-            httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
-            httpRequest.Content = new StringContent(JsonSerializer.Serialize(request), System.Text.Encoding.UTF8, "application/json");
-
-            var response = await _httpClient.SendAsync(httpRequest);
+            var response = await _httpClient.PostAsJsonAsync("https://api.voyageai.com/v1/embeddings", payload);
             var content = await response.Content.ReadAsStringAsync();
 
             if (!response.IsSuccessStatusCode)
@@ -58,16 +56,19 @@ public class VoyageEmbeddingService : IEmbeddingService
                 return new float[1024]; // Fail-safe
             }
 
-            using var doc = JsonDocument.Parse(content);
-            var embedding = doc.RootElement
-                .GetProperty("data")[0]
-                .GetProperty("embedding")
-                .EnumerateArray()
-                .Select(x => x.GetSingle())
-                .ToArray();
+            var result = JsonSerializer.Deserialize<VoyageResponse>(content, new JsonSerializerOptions 
+            { 
+                PropertyNameCaseInsensitive = true 
+            });
 
-            _logger.LogInformation("Successfully generated {Count}d embedding via Voyage AI", embedding.Length);
-            return embedding;
+            if (result?.Data == null || result.Data.Count == 0 || result.Data[0].Embedding == null)
+            {
+                _logger.LogWarning("Voyage returned empty or malformed data: {Content}", content);
+                return new float[1024];
+            }
+
+            _logger.LogInformation("Successfully generated {Count}d embedding via Voyage AI", result.Data[0].Embedding.Count());
+            return result.Data[0].Embedding;
         }
         catch (Exception ex)
         {
@@ -75,4 +76,14 @@ public class VoyageEmbeddingService : IEmbeddingService
             return new float[1024]; // Fail-safe
         }
     }
+}
+
+public class VoyageResponse
+{
+    public List<VoyageData>? Data { get; set; }
+}
+
+public class VoyageData
+{
+    public float[]? Embedding { get; set; }
 }
