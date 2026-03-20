@@ -25,6 +25,11 @@ public class HuggingFaceEmbeddingService : IEmbeddingService
         if (!string.IsNullOrEmpty(apiKey))
         {
             _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+            _logger.LogInformation("HuggingFace API Key found and configured (starts with {Start}...)", apiKey.Substring(0, Math.Min(5, apiKey.Length)));
+        }
+        else
+        {
+            _logger.LogWarning("NO HuggingFace API Key found in configuration! Check environment variables.");
         }
         
         _logger = logger;
