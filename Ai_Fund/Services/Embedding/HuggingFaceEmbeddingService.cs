@@ -25,7 +25,7 @@ public class HuggingFaceEmbeddingService : IEmbeddingService
         
         try
         {
-            var apiKey = configuration["HuggingFace:ApiKey"];
+            var apiKey = configuration["HuggingFace:ApiKey"]?.Trim();
             if (!string.IsNullOrEmpty(apiKey))
             {
                 _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
@@ -71,6 +71,7 @@ public class HuggingFaceEmbeddingService : IEmbeddingService
                 }
                 else
                 {
+                    _logger.LogError("HuggingFace API failed: {StatusCode} - {URL} - {Error}", response.StatusCode, _modelUrl, errorContent);
                     response.EnsureSuccessStatusCode();
                 }
             }
