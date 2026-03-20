@@ -25,18 +25,32 @@ public class OllamaLLMService : ILLMService
 
         var prompt = $@"{_personalityService.GetPersonalityPrompt()}
 
-Context: {context}
+Knowledge Base Context:
+{context}
 
-Question: {query}";
+User Question: {query}
+
+Provide an accurate, helpful answer based on the context above.
+
+GUIDELINES:
+- Speak DIRECTLY to the user. Do NOT describe what you are doing (e.g., never say ""Responding to a user's query..."").
+- Do NOT introduce your role or yourself (e.g., never say ""As an AI assistant..."").
+- Use the context to give factual, accurate information
+- Be conversational and friendly
+- Keep it concise (3-5 sentences) unless more detail is requested
+- For 'best' or 'top' queries, mention fund categories and characteristics
+- For comparison queries, highlight key differences
+- Include practical examples when relevant
+- Always mention 'mutual funds are subject to market risk' when discussing returns";
 
         if (forceExpansion)
         {
-            prompt += "\n\nGive more detailed explanation including benefits, risks, and examples.";
+            prompt += "\n\nProvide detailed explanation including benefits, risks, examples, and practical tips.";
         }
 
         if (isFollowUp)
         {
-            prompt += "\n\nProvide additional details and avoid repeating previous answer.";
+            prompt += "\n\nProvide additional details and avoid repeating the previous answer.";
         }
 
         if (!string.IsNullOrEmpty(lastAnswer) && context.Contains(lastAnswer))

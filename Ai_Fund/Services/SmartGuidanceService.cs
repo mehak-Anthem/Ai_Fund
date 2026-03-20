@@ -9,14 +9,14 @@ public interface ISmartGuidanceService
     int ExtractAmount(string query);
     int ExtractYears(string query);
     string ExtractInvestmentType(string query);
-    string GenerateInvestmentAdvice(int amount);
+    Task<string> GenerateInvestmentAdviceAsync(int amount);
     bool IsReturnsQuery(string query);
     bool IsFDQuery(string query);
-    string GenerateReturnsGuidance();
-    string GenerateReturnsForAmount(int monthlyAmount, int years);
-    string GenerateFDReturns(int amount, int years);
-    string GenerateUniversalReturns(string investmentType, int amount, int years);
-    string CompareInvestments(string type1, string type2, int amount, int years);
+    Task<string> GenerateReturnsGuidanceAsync();
+    Task<string> GenerateReturnsForAmountAsync(int monthlyAmount, int years);
+    Task<string> GenerateFDReturnsAsync(int amount, int years);
+    Task<string> GenerateUniversalReturnsAsync(string investmentType, int amount, int years);
+    Task<string> CompareInvestmentsAsync(string type1, string type2, int amount, int years);
 }
 
 public class SmartGuidanceService : ISmartGuidanceService
@@ -46,6 +46,9 @@ public class SmartGuidanceService : ISmartGuidanceService
                query.Contains("what will be") ||
                query.Contains("what will i get") ||
                query.Contains("how much will i get") ||
+               query.Contains("can i invest") ||
+               query.Contains("should i go for") ||
+               query.Contains("is it good for me") ||
                (query.Contains("i") && query.Contains("invest") && query.Contains("where")) ||
                (query.Contains("i") && query.Contains("invest") && query.Contains("how much")) ||
                (query.Contains("i") && query.Contains("invest") && query.Contains("return"));
@@ -61,15 +64,28 @@ public class SmartGuidanceService : ISmartGuidanceService
     {
         query = query.ToLower();
         
-        // Look for "X year" or "X years"
-        var yearMatch = Regex.Match(query, @"(\d+)\s*year");
+        // Look for "X year" or "X years" (e.g., "10 year", "5 years")
+        var yearMatch = Regex.Match(query, @"(\d+)\s*years?");
         if (yearMatch.Success)
         {
             return int.Parse(yearMatch.Groups[1].Value);
         }
         
+        // Look for written numbers (e.g., "one year", "ten years")
+        var writtenNumbers = new Dictionary<string, int>
+        {
+            { "one", 1 }, { "two", 2 }, { "three", 3 }, { "four", 4 }, { "five", 5 },
+            { "six", 6 }, { "seven", 7 }, { "eight", 8 }, { "nine", 9 }, { "ten", 10 }
+        };
+        
+        foreach (var num in writtenNumbers)
+        {
+            if (query.Contains($"{num.Key} year"))
+                return num.Value;
+        }
+        
         // Default to 1 year if asking about returns but no timeframe specified
-        if (query.Contains("one year") || query.Contains("1 year"))
+        if (query.Contains("in year") || query.Contains("per year") || query.Contains("a year"))
             return 1;
         
         return 0;
@@ -110,7 +126,7 @@ public class SmartGuidanceService : ISmartGuidanceService
         return string.Empty;
     }
     
-    public string GenerateUniversalReturns(string investmentType, int amount, int years)
+    public async Task<string> GenerateUniversalReturnsAsync(string investmentType, int amount, int years)
     {
         // Define typical returns for different investment types
         var returns = investmentType switch
@@ -130,22 +146,24 @@ public class SmartGuidanceService : ISmartGuidanceService
         var maturityAmount = amount * Math.Pow(1 + returns.Rate, years);
         var profit = maturityAmount - amount;
         
-        return $@"With ₹{amount:N0} in {returns.Name} for {years} year{(years > 1 ? "s" : "")}:
+        var prompt = $@"
+You are Miria, a smart and helpful financial assistant.
+The user wants to know about returns for investing ₹{amount:N0} in {returns.Name} for {years} year{(years > 1 ? "s" : "")}.
+Use these exact factual calculations in your response:
+- Expected value roughly: ₹{maturityAmount:N0}
+- Estimated profit: ₹{profit:N0}
+- Annual return rate used: ~{returns.Rate * 100:F1}%
+- Risk level: {returns.Risk}
+- Investment type: {returns.Type}
 
-📊 Returns:
-Invested: ₹{amount:N0}
-Expected value: ₹{maturityAmount:N0} (approx)
-Estimated profit: ₹{profit:N0}
-
-(assuming ~{returns.Rate * 100:F1}% annual return)
-
-🎯 Note:
-Risk level: {returns.Risk}
-Type: {returns.Type}
-{(returns.Type == "Market-linked" ? "Returns may vary based on market performance." : "Returns are relatively stable.")}";
+Provide a conversational, easy-to-read response that shares these numbers natively.
+Add a note that {(returns.Type == "Market-linked" ? "returns may vary based on market performance." : "returns are relatively stable.")}
+Do not mention the prompt context. Be friendly!
+";
+        return await _llmService.GenerateStructuredAsync(prompt);
     }
     
-    public string CompareInvestments(string type1, string type2, int amount, int years)
+    public async Task<string> CompareInvestmentsAsync(string type1, string type2, int amount, int years)
     {
         // Universal investment data
         var investmentData = new Dictionary<string, (double Rate, string Risk, string Type)>
@@ -179,60 +197,63 @@ Type: {returns.Type}
         var profit2 = amount * (Math.Pow(1 + returns2.Rate, years) - 1);
         var difference = Math.Abs(profit2 - profit1);
         var better = profit1 > profit2 ? type1 : type2;
-        var betterProfit = Math.Max(profit1, profit2);
         
-        return $@"Comparison for ₹{amount:N0} invested for {years} year{(years > 1 ? "s" : "")}:
+        var prompt = $@"
+You are Miria, a smart and helpful financial assistant.
+You need to compare investing ₹{amount:N0} over {years} year{(years > 1 ? "s" : "")} in {type1} vs {type2}.
+Use these exact factual calculations:
 
-📊 {type1}:
-• Profit: ₹{profit1:N0} ({returns1.Rate * 100:F1}%)
-• Risk: {returns1.Risk}
-• Type: {returns1.Type}
+{type1} Details:
+- Expected Profit: ₹{profit1:N0} (at {returns1.Rate * 100:F1}%)
+- Risk Level: {returns1.Risk}
+- Investment Type: {returns1.Type}
 
-📊 {type2}:
-• Profit: ₹{profit2:N0} ({returns2.Rate * 100:F1}%)
-• Risk: {returns2.Risk}
-• Type: {returns2.Type}
+{type2} Details:
+- Expected Profit: ₹{profit2:N0} (at {returns2.Rate * 100:F1}%)
+- Risk Level: {returns2.Risk}
+- Investment Type: {returns2.Type}
 
-💡 Difference: ₹{difference:N0} more with {better}
+Difference Insight: They could earn roughly ₹{difference:N0} more in profit with {better}.
 
-🎯 Tip:
-Choose based on your risk appetite and investment goals.";
+Write a natural, conversational response sharing this comparison. Highlight the profitability difference, but also mention the difference in risk. Conclude with a helpful tip emphasizing they should choose based on their risk appetite and investment goals.
+";
+        return await _llmService.GenerateStructuredAsync(prompt);
     }
 
-    public string GenerateFDReturns(int amount, int years)
+    public async Task<string> GenerateFDReturnsAsync(int amount, int years)
     {
         // FD typically gives 6-7% annual interest
         var interestRate = 0.065; // 6.5% average
         var maturityAmount = amount * Math.Pow(1 + interestRate, years);
         var interest = maturityAmount - amount;
 
-        return $@"With ₹{amount:N0} in FD for {years} year{(years > 1 ? "s" : "")}, you'll get:
+        var prompt = $@"
+You are Miria, a smart and helpful financial assistant.
+The user wants to know about returns for a Fixed Deposit (FD) of ₹{amount:N0} over {years} year{(years > 1 ? "s" : "")}.
+Use these exact calculations:
+- Maturity amount: ₹{maturityAmount:N0} (approx)
+- Interest earned: ₹{interest:N0}
+- Interest rate assumed: ~6.5% annually
 
-📊 Returns:
-Invested: ₹{amount:N0}
-Maturity amount: ₹{maturityAmount:N0} (approx)
-Interest earned: ₹{interest:N0}
-
-(assuming ~6.5% annual interest)
-
-🎯 Note:
-FD provides fixed, guaranteed returns. Good for safety and short-term goals.";
+Present this information naturally and conversationally.
+End with a note that FDs provide fixed, guaranteed returns, which is good for safety and short-term goals.
+";
+        return await _llmService.GenerateStructuredAsync(prompt);
     }
 
-    public string GenerateReturnsGuidance()
+    public async Task<string> GenerateReturnsGuidanceAsync()
     {
-        return @"Returns depend on market conditions, but here's a realistic idea:
-
-📊 Example:
-₹5,000/month SIP for 10 years → ~₹10-12 lakh (approx)
-
-(assuming ~12% annual return)
-
-🎯 Tip:
-Long-term investing gives better results than short-term. SIP works best for 5+ years.";
+        var prompt = @"
+You are Miria, a smart and helpful financial assistant.
+The user is asking generally about what kind of returns they can expect from investments.
+Explain dynamically that returns depend on market conditions.
+Give a realistic example: ""A ₹5,000/month SIP for 10 years typically grows to roughly ₹10-12 lakh (assuming a historical return of ~12% annually).""
+Conclude with a tip that long-term investing gives better compounding results and SIP works best for 5+ years.
+";
+        return await _llmService.GenerateStructuredAsync(prompt);
     }
 
-    public string GenerateReturnsForAmount(int monthlyAmount, int years)
+    public async Task<string> GenerateReturnsForAmountAsync(int monthlyAmount, int years)
     {
         // Simple compound interest calculation for SIP
         // Using ~12% annual return assumption
@@ -242,81 +263,85 @@ Long-term investing gives better results than short-term. SIP works best for 5+ 
         var totalInvested = monthlyAmount * months;
         var returns = futureValue - totalInvested;
 
-        return $@"Returns depend on market, but here's a realistic estimate:
+        var prompt = $@"
+You are Miria, a smart and helpful financial assistant.
+The user wants to invest ₹{monthlyAmount:N0} per month (SIP) for {years} year{(years > 1 ? "s" : "")}.
+Use these exact mathematical facts in your response:
+- Total amount invested: ₹{totalInvested:N0}
+- Expected total value: ₹{futureValue:N0} (approx)
+- Estimated returns/profit: ₹{returns:N0}
+- Historical annual return rate assumed: ~12%
 
-📊 Your scenario:
-₹{monthlyAmount:N0}/month for {years} year{(years > 1 ? "s" : "")}
-
-Total invested: ₹{totalInvested:N0}
-Expected value: ₹{futureValue:N0} (approx)
-Estimated returns: ₹{returns:N0}
-
-(assuming ~12% annual return)
-
-🎯 Tip:
-Longer investment periods give better compounding results.";
+Present this cleanly and dynamically. Mention that returns depend on the market but this is a realistic estimate based on historical averages.
+End with a tip that longer investment periods give substantially better compounding results.
+";
+        return await _llmService.GenerateStructuredAsync(prompt);
     }
 
-    public string GenerateInvestmentAdvice(int amount)
+    public async Task<string> GenerateInvestmentAdviceAsync(int amount)
     {
+        string allocationDetail = "";
+        
         if (amount >= 10000)
         {
             var half = amount / 2;
-            return $@"Good question. With ₹{amount:N0}, you can balance safety and growth.
-
-💡 Simple approach:
-• ₹{half:N0} in FD → safe, stable returns
-• ₹{half:N0} in SIP → growth over time
-
-🎯 Tip:
-Use FD for short-term needs, and SIP for long-term wealth building.";
+            allocationDetail = $@"Balance safety and growth for investment of ₹{amount:N0}. A simple approach is: ₹{half:N0} in FD for safe stable returns, and ₹{half:N0} in SIP for growth over time. Use FD for short-term needs and SIP for long-term.";
         }
         else if (amount >= 5000)
         {
-            return $@"With ₹{amount:N0}, SIP is a good starting option for long-term growth.
-
-💡 Simple idea:
-• Start with ₹{amount:N0}/month SIP
-• Stay invested for 5-10 years
-
-🎯 Tip:
-Consistency matters more than amount in SIP.";
+            allocationDetail = $@"For an investment of ₹{amount:N0}, a SIP is a good starting option for long-term growth. Advise them to start with a ₹{amount:N0}/month SIP and stay invested for at least 5-10 years. Emphasize that consistency matters more than the initial amount.";
         }
         else if (amount > 0)
         {
-            return $@"With ₹{amount:N0}, you can start small with SIP.
-
-💡 Simple approach:
-• Begin with ₹{amount:N0}/month
-• Increase gradually as income grows
-
-🎯 Tip:
-Starting early is more important than starting big.";
+            allocationDetail = $@"For ₹{amount:N0}, they can still start small with a SIP. Recommend beginning with ₹{amount:N0}/month and increasing the investment gradually as income grows. Emphasize that starting early is more important than starting big.";
         }
 
-        return string.Empty;
+        if(string.IsNullOrEmpty(allocationDetail))
+             return string.Empty;
+
+        var prompt = $@"
+You are Miria, a friendly financial assistant providing guidance.
+The user wants advice on how to invest ₹{amount:N0}.
+Use this exact guidance strategy and format it into a natural, conversational response:
+
+{allocationDetail}
+
+Do not perform new math. Structure the response engagingly.
+";
+        return await _llmService.GenerateStructuredAsync(prompt);
     }
 
     public async Task<string> GenerateGuidedAnswerAsync(string query, string context)
     {
         var prompt = $@"
-You are Miria, a smart financial assistant.
+You are Miria, a smart and helpful financial assistant.
 
-User asked: {query}
+User Question: {query}
 
-Context: {context}
+Knowledge Base Context:
+{context}
 
-Give a helpful, practical answer in 4-6 lines.
+Provide a helpful, accurate, and practical answer based on the context provided.
 
-RULES:
-- Start with Good question. It depends on your goals/risk level/time horizon
-- Give 2-3 options with bullet points
-- Include ONE simple example with numbers
-- End with a practical tip
-- Do NOT include prompt instructions in your answer
-- Do NOT say I cannot give advice
+GUIDELINES:
+- Use the context to give accurate information
+- Be conversational and friendly
+- Give practical examples with numbers when relevant
+- Keep it concise (4-8 lines)
+- If asking about best/top funds, provide general categories and characteristics
+- For comparison queries, highlight key differences clearly
+- For returns queries, give realistic expectations with disclaimers
+- End with a practical tip or next step
 
-Answer directly without repeating these instructions:";
+IMPORTANT:
+- Do NOT say 'I cannot give advice' - instead provide general guidance
+- Do NOT repeat the question
+- Do NOT include these instructions in your answer
+- Base your answer on the provided context
+- Speak DIRECTLY to the user. Do NOT describe what you are doing.
+- Do NOT introduce yourself or your role (e.g., never start with ""As a financial assistant"").
+
+Answer:";
 
         return await _llmService.GenerateStructuredAsync(prompt);
     }

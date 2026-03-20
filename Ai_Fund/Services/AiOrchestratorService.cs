@@ -151,41 +151,23 @@ public class AiOrchestratorService : IAiOrchestratorService
             var isPersonalQuery = _smartGuidanceService.IsPersonalQuery(originalQuery);
             var needsStructuredEarly = _structuredAnswerService.NeedsStructuredAnswer(originalQuery);
             
-            _logger.LogInformation("Personal query: {IsPersonal}, Structured: {NeedsStructured} for: {Query}", 
-                isPersonalQuery, needsStructuredEarly, originalQuery);
+            _logger.LogInformation("Personal query: {IsPersonal}, Structured: {NeedsStructured}, Intent: {Intent} for: {Query}", 
+                isPersonalQuery, needsStructuredEarly, intent, originalQuery);
             
-            // Skip static ADVICE for personal or structured queries
-            if (!isPersonalQuery && !needsStructuredEarly)
+            // 7. Handle static intents (only GREETING and CLOSING)
+            var staticResponse = HandleStaticIntent(intent);
+            if (staticResponse != null)
             {
-                // 7. Handle static intents only if NOT a personal/structured query
-                var staticResponse = HandleStaticIntent(intent);
-                if (staticResponse != null)
-                {
-                    _logger.LogInformation("Returning static response for intent: {Intent}", intent);
-                    _contextManager.SaveContext(userId, query, intent, query);
-                    return staticResponse;
-                }
-            }
-            else
-            {
-                _logger.LogInformation("Skipping static ADVICE - will use smart guidance or structured answer");
+                _logger.LogInformation("Returning static response for intent: {Intent}", intent);
+                _contextManager.SaveContext(userId, query, intent, query);
+                return staticResponse;
             }
 
-            // 8. Handle old comparison queries (keep for backward compatibility)
-            if (ResponseFormatter.IsComparisonQuery(query))
-            {
-                var comparisonAnswer = ResponseFormatter.HandleComparison(query);
-                if (!string.IsNullOrEmpty(comparisonAnswer))
-                {
-                    return CreateResponse(comparisonAnswer, "Static", 1.0, "COMPARISON");
-                }
-            }
+            // 8. Remove old static comparison handler - now uses dynamic RAG+LLM
+            // All comparison queries will go through the RAG pipeline for accurate, context-aware responses
 
-            // 8. Handle guidance queries
-            if (ResponseFormatter.IsGuidanceQuery(query))
-            {
-                return CreateResponse(ResponseFormatter.HandleGuidance(query), "Static", 1.0, "GUIDANCE");
-            }
+            // 9. Remove static guidance handler - now uses dynamic RAG+LLM
+            // All guidance queries will go through SmartGuidanceService or RAG pipeline
 
             // Extract topic and rich context BEFORE they are used
             var topic = ExtractTopic(query);
@@ -218,7 +200,7 @@ public class AiOrchestratorService : IAiOrchestratorService
                 // If we have 2+ types and amount, do comparison
                 if (allTypes.Count >= 2 && queryAmount > 0)
                 {
-                    var comparison = _smartGuidanceService.CompareInvestments(allTypes[0], allTypes[1], queryAmount, years);
+                    var comparison = await _smartGuidanceService.CompareInvestmentsAsync(allTypes[0], allTypes[1], queryAmount, years);
                     var compEntities = _comparisonService.ExtractAllEntities(originalQuery);
                     if (compEntities.Count == 0) compEntities = allTypes;
                     _contextManager.SaveRichContext(userId, originalQuery, comparison, topic, compEntities);
@@ -320,7 +302,7 @@ public class AiOrchestratorService : IAiOrchestratorService
                     // If we have all required info, give personalized calculation
                     if (queryAmount > 0 && !string.IsNullOrEmpty(investmentType))
                     {
-                        var universalReturns = _smartGuidanceService.GenerateUniversalReturns(investmentType, queryAmount, years);
+                        var universalReturns = await _smartGuidanceService.GenerateUniversalReturnsAsync(investmentType, queryAmount, years);
                         var returnsEntities = _comparisonService.ExtractAllEntities(originalQuery);
                         _contextManager.SaveRichContext(userId, originalQuery, universalReturns, topic, returnsEntities);
                         return CreateResponse(universalReturns, "SmartGuidance", 1.0, "GUIDANCE");
@@ -329,14 +311,14 @@ public class AiOrchestratorService : IAiOrchestratorService
                     // If we have amount and years but no type, assume SIP
                     if (queryAmount > 0 && years > 0)
                     {
-                        var personalizedReturns = _smartGuidanceService.GenerateReturnsForAmount(queryAmount, years);
+                        var personalizedReturns = await _smartGuidanceService.GenerateReturnsForAmountAsync(queryAmount, years);
                         var sipEntities = _comparisonService.ExtractAllEntities(originalQuery);
                         _contextManager.SaveRichContext(userId, originalQuery, personalizedReturns, topic, sipEntities);
                         return CreateResponse(personalizedReturns, "SmartGuidance", 1.0, "GUIDANCE");
                     }
                     
                     // Otherwise give general returns guidance
-                    var returnsGuidance = _smartGuidanceService.GenerateReturnsGuidance();
+                    var returnsGuidance = await _smartGuidanceService.GenerateReturnsGuidanceAsync();
                     var generalReturnsEntities = _comparisonService.ExtractAllEntities(originalQuery);
                     _contextManager.SaveRichContext(userId, originalQuery, returnsGuidance, topic, generalReturnsEntities);
                     return CreateResponse(returnsGuidance, "SmartGuidance", 1.0, "GUIDANCE");
@@ -350,7 +332,7 @@ public class AiOrchestratorService : IAiOrchestratorService
                     var amountEntities = _comparisonService.ExtractAllEntities(originalQuery);
                     _contextManager.SaveRichContext(userId, originalQuery, string.Empty, topic, amountEntities);
                     
-                    var investmentAdvice = _smartGuidanceService.GenerateInvestmentAdvice(amount);
+                    var investmentAdvice = await _smartGuidanceService.GenerateInvestmentAdviceAsync(amount);
                     
                     if (!string.IsNullOrEmpty(investmentAdvice))
                     {
@@ -620,7 +602,6 @@ public class AiOrchestratorService : IAiOrchestratorService
         {
             "GREETING" => CreateResponse("Hello! I can help you with mutual fund queries.", "Static", 1.0, intent),
             "CLOSING" => CreateResponse("Thank you for using our service. Have a great day!", "Static", 1.0, intent),
-            "ADVICE" => CreateResponse("I can provide general information, but I cannot give personalized financial advice.", "Static", 1.0, intent),
             _ => null
         };
     }
@@ -673,7 +654,7 @@ public class AiOrchestratorService : IAiOrchestratorService
 
     private ChatResponse? ApplyGuardrails(string aiResponse)
     {
-        // Only block truly dangerous guarantees, not informational content
+        // Only block if the response contains dangerous guarantees
         if (aiResponse.Contains("guaranteed returns", StringComparison.OrdinalIgnoreCase) ||
             aiResponse.Contains("fixed guaranteed return", StringComparison.OrdinalIgnoreCase) ||
             aiResponse.Contains("100% guaranteed", StringComparison.OrdinalIgnoreCase))
@@ -681,12 +662,20 @@ public class AiOrchestratorService : IAiOrchestratorService
             return CreateResponse("Mutual funds are subject to market risk. No returns are guaranteed.", "SafetyFilter", 0, "BLOCKED");
         }
 
-        // Only block if giving specific financial amounts as personal advice
-        if ((aiResponse.Contains("you must invest", StringComparison.OrdinalIgnoreCase) ||
+        // Only block if giving specific personal investment commands with amounts
+        if ((aiResponse.Contains("you must invest exactly", StringComparison.OrdinalIgnoreCase) ||
              aiResponse.Contains("you should definitely invest", StringComparison.OrdinalIgnoreCase)) &&
             (aiResponse.Contains("₹") || aiResponse.Contains("$")))
         {
             return CreateResponse("I can provide general information, but not specific financial advice.", "SafetyFilter", 0, "BLOCKED");
+        }
+        
+        // Don't block general informational content about best/top funds
+        if (aiResponse.Contains("best", StringComparison.OrdinalIgnoreCase) ||
+            aiResponse.Contains("top", StringComparison.OrdinalIgnoreCase) ||
+            aiResponse.Contains("popular", StringComparison.OrdinalIgnoreCase))
+        {
+            return null; // Allow it
         }
 
         return null;
@@ -781,7 +770,11 @@ public class AiOrchestratorService : IAiOrchestratorService
             response.StartsWith("Hello!", StringComparison.OrdinalIgnoreCase) ||
             response.StartsWith("Good morning", StringComparison.OrdinalIgnoreCase) ||
             response.StartsWith("Yes,", StringComparison.OrdinalIgnoreCase) ||
-            response.StartsWith("As a professional", StringComparison.OrdinalIgnoreCase))
+            response.StartsWith("As a professional", StringComparison.OrdinalIgnoreCase) ||
+            response.StartsWith("As a knowledgeable", StringComparison.OrdinalIgnoreCase) ||
+            response.StartsWith("As a financial", StringComparison.OrdinalIgnoreCase) ||
+            response.StartsWith("As your financial", StringComparison.OrdinalIgnoreCase) ||
+            response.StartsWith("As an AI", StringComparison.OrdinalIgnoreCase))
         {
             var sentences = response.Split(new[] { '.', '!', '?' }, StringSplitOptions.RemoveEmptyEntries);
             if (sentences.Length > 1)

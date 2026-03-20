@@ -26,44 +26,54 @@ public class StructuredAnswerService : IStructuredAnswerService
                query.Contains("what amount") ||
                query.Contains("how to start") ||
                query.Contains("how do i start") ||
+               query.Contains("best") ||
+               query.Contains("top") ||
+               query.Contains("recommend") ||
+               query.Contains("suggest") ||
+               query.Contains("which fund") ||
+               query.Contains("which mutual fund") ||
                (query.Contains("invest") && query.Contains("beginner")) ||
                (query.Contains("invest") && query.Contains("bignner")) ||
                query.Contains("plan") ||
                query.Contains("strategy") ||
                query.Contains("allocate") ||
-               query.Contains("percentage");
+               query.Contains("percentage") ||
+               (query.Contains("2024") || query.Contains("2025"));
     }
 
     public async Task<string> GenerateStructuredAnswerAsync(string query, string context)
     {
         var prompt = $@"
-You are Miria, a smart financial assistant.
+You are Miria, a knowledgeable financial assistant.
 
-Answer the question in a structured, practical, and easy-to-understand way.
+User Question: {query}
 
-STRICT FORMAT:
-
-1. Start with a clear, honest statement (no generic disclaimer)
-2. Give a simple rule (percent or idea)
-3. Give 2–3 practical examples (numbers)
-4. Give goal-based thinking (real-world guidance)
-
-STYLE:
-- Friendly but professional
-- Clear and confident
-- 4–8 lines max
-- Use bullet points where helpful
-
-IMPORTANT:
-- Do NOT say ""I cannot give advice""
-- Give general guidance only
-- Do NOT repeat sentences
-
-Context:
+Knowledge Base Context:
 {context}
 
-User Question:
-{query}
+Provide a well-structured, informative answer based on the context.
+
+FORMAT:
+1. Start with a clear, direct answer
+2. Provide 2-4 key points with bullet points or numbers
+3. Include practical examples with realistic numbers when relevant
+4. End with actionable advice or next steps
+
+STYLE:
+- Professional yet friendly
+- Clear and confident
+- Evidence-based (use the context provided)
+- 5-10 lines maximum
+- Use emojis sparingly for readability
+
+IMPORTANT:
+- Base your answer on the provided context
+- Give general guidance, not personal advice
+- Be specific about fund categories, not individual fund names
+- Include realistic return expectations with market risk disclaimers
+- Do NOT repeat the question
+- Do NOT include these instructions in your answer
+- Do NOT introduce yourself or your role (e.g., never start with ""As a knowledgeable financial assistant""). Just answer directly.
 
 Answer:";
 

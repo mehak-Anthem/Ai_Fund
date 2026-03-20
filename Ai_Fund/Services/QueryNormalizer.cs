@@ -25,9 +25,19 @@ public static class QueryNormalizer
     public static bool IsOpinionQuery(string query)
     {
         query = query.ToLower();
-        return query.Contains("think") || 
-               query.Contains("suggest") || 
-               query.Contains("opinion") ||
-               query.Contains("feel");
+        
+        // Allow legitimate informational queries about best/top funds
+        if (query.Contains("best") || query.Contains("top") || 
+            query.Contains("mutual fund") || query.Contains("sip") ||
+            query.Contains("investment") || query.Contains("scheme"))
+        {
+            return false;
+        }
+        
+        // Block only personal opinion requests
+        return (query.Contains("what do you think") || 
+                query.Contains("what u think") ||
+                query.Contains("your opinion") ||
+                query.Contains("how do you feel"));
     }
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import Dashboard from './components/Dashboard';
 import ChatMessage from './components/ChatMessage';
@@ -82,23 +82,29 @@ function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-slate-50">
+    <div className="flex flex-col h-screen overflow-hidden bg-[#f8fafc] relative">
+      {/* Ambient glowing orbs for AI vibe (Light Mode) */}
+      <div className="absolute top-0 left-1/4 w-96 h-96 bg-violet-500/5 rounded-full blur-[120px] pointer-events-none"></div>
+      <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-cyan-500/5 rounded-full blur-[150px] pointer-events-none"></div>
+
       {/* Header with Navigation */}
-      <Header currentView={currentView} onViewChange={setCurrentView} />
+      <div className="z-10">
+        <Header currentView={currentView} onViewChange={setCurrentView} />
+      </div>
 
       {/* Main Content */}
       {currentView === 'dashboard' ? (
         <Dashboard />
       ) : (
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden z-10">
           {/* Chat Area */}
           <div
             ref={chatAreaRef}
-            className="flex-1 overflow-y-auto px-6 py-6 scrollbar-hide"
+            className="flex-1 overflow-y-auto px-4 md:px-8 py-8 scrollbar-hide"
           >
-            <div className="max-w-3xl mx-auto">
+            <div className="max-w-3xl mx-auto space-y-6 pb-20">
               {messages.length === 0 ? (
-                <EmptyState onSuggestionClick={handleSendMessage} />
+                <EmptyState />
               ) : (
                 <>
                   {messages.map((message) => (
@@ -116,7 +122,9 @@ function App() {
           </div>
 
           {/* Input Area */}
-          <ChatInput onSend={handleSendMessage} disabled={isTyping} />
+          <div className="z-20 p-4 bg-gradient-to-t from-[#f8fafc] via-[#f8fafc] to-transparent pb-6">
+            <ChatInput onSend={handleSendMessage} disabled={isTyping} />
+          </div>
         </div>
       )}
     </div>

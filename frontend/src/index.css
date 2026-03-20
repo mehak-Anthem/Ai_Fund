@@ -4,7 +4,8 @@
 
 @layer base {
   body {
-    @apply font-['Inter'] bg-slate-50 text-slate-900;
+    /* Premium crisp light background */
+    @apply font-['Inter'] bg-[#f8fafc] text-slate-800 antialiased selection:bg-primary/20 selection:text-primary-dark;
   }
 }
 
@@ -18,18 +19,19 @@
     scrollbar-width: none;
   }
 
-  .animate-fadeIn {
-    animation: fadeIn 0.3s ease-in-out;
+  .glass-panel {
+    @apply bg-white/70 backdrop-blur-2xl border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)];
   }
 
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-      transform: translateY(10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+  .glass-card {
+    @apply bg-white border border-slate-100 hover:border-slate-200 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300;
+  }
+
+  .text-gradient {
+    background: linear-gradient(135deg, #8b5cf6 0%, #06b6d4 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    color: transparent;
   }
 }
