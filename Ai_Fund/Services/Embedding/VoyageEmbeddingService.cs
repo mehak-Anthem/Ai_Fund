@@ -26,6 +26,7 @@ public class VoyageEmbeddingService : IEmbeddingService
         }
         else
         {
+            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
             _logger.LogInformation("VoyageEmbeddingService initialized with model: {Model}", _model);
         }
     }
