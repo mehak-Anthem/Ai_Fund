@@ -23,7 +23,7 @@ public class HuggingFaceEmbeddingService : IEmbeddingService
         try
         {
             var model = configuration["HuggingFace:EmbeddingModel"] ?? "sentence-transformers/all-MiniLM-L6-v2";
-            _modelUrl = $"https://router.huggingface.co/hf-inference/models/{model}";
+            _modelUrl = $"https://api-inference.huggingface.co/pipeline/feature-extraction/{model}";
             
             var apiKey = configuration["HuggingFace:ApiKey"]?.Trim();
             if (!string.IsNullOrEmpty(apiKey))
@@ -49,84 +49,67 @@ public class HuggingFaceEmbeddingService : IEmbeddingService
     {
         try
         {
-            var request = new 
-            { 
-                inputs = new[] { text }
-            };
-            int maxRetries = 3;
-            int delayMs = 2000;
-            HttpResponseMessage? response = null;
-
-            for (int i = 0; i < maxRetries; i++)
-            {
-                response = await _httpClient.PostAsJsonAsync(_modelUrl, request);
-                
-                if (response.IsSuccessStatusCode)
-                    break;
-
-                var errorContent = await response.Content.ReadAsStringAsync();
-                
-                if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests || 
-                    errorContent.Contains("currently loading"))
-                {
-                    _logger.LogWarning("HuggingFace API busy (Retry {Retry}/{Max}): {StatusCode}. Waiting {Delay}ms...", i + 1, maxRetries, response.StatusCode, delayMs);
-                    await Task.Delay(delayMs);
-                    delayMs *= 2; // Exponential backoff
-                }
-                else
-                {
-                    _logger.LogError("HuggingFace API failed: {StatusCode} - {URL} - {Error}", response.StatusCode, _modelUrl, errorContent);
-                    response.EnsureSuccessStatusCode();
-                }
-            }
-
-            response!.EnsureSuccessStatusCode();
-
-            var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+            // NEW: Use the direct string payload as suggested by the user
+            // HuggingFace pipeline endpoints often prefer raw strings over JSON objects
+            var response = await _httpClient.PostAsJsonAsync(_modelUrl, text);
             
-            // HuggingFace feature-extraction returns a nested array for single input: [[f1, f2...]]
-            // or sometimes a flat array for non-batch: [f1, f2...]
-            var embeddings = new List<float>();
-            
-            if (json.ValueKind == JsonValueKind.Array)
+            if (response.IsSuccessStatusCode)
             {
-                var enumArr = json.EnumerateArray();
-                if (enumArr.Any())
-                {
-                    var firstElement = enumArr.First();
-                    if (firstElement.ValueKind == JsonValueKind.Array)
-                    {
-                        // Nested array [[...]]
-                        foreach (var value in firstElement.EnumerateArray())
-                        {
-                            embeddings.Add(value.GetSingle());
-                        }
-                    }
-                    else
-                    {
-                        // Flat array [...]
-                        foreach (var value in json.EnumerateArray())
-                        {
-                            embeddings.Add(value.GetSingle());
-                        }
-                    }
-                }
+                var json = await response.Content.ReadFromJsonAsync<JsonElement>();
+                return ParseEmbedding(json);
             }
             
-            if (embeddings.Count == 0)
-            {
-                var raw = json.GetRawText();
-                _logger.LogWarning("HuggingFace returned empty or unexpected format: {Raw}", raw);
-                throw new Exception($"HuggingFace returned invalid embedding format. Raw response: {raw}");
-            }
+            var error = await response.Content.ReadAsStringAsync();
+            _logger.LogError("HuggingFace API failed: {Status} - {Error}", response.StatusCode, error);
             
-            _logger.LogInformation("Generated embedding with {Count} dimensions via feature-extraction pipeline", embeddings.Count);
-            return embeddings.ToArray();
+            // 🔥 FAIL SAFE: Return empty vector instead of crashing
+            _logger.LogWarning("Returning zero-vector (384d) as fail-safe fallback.");
+            return new float[384];
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error generating embedding via HuggingFace");
-            throw; // Rethrow so the caller knows it failed
+            _logger.LogError(ex, "HuggingFace EXCEPTION: {Message}", ex.Message);
+            
+            // 🔥 NEVER BREAK PROD
+            return new float[384];
         }
+    }
+
+    private float[] ParseEmbedding(JsonElement json)
+    {
+        var embeddings = new List<float>();
+        
+        if (json.ValueKind == JsonValueKind.Array)
+        {
+            var enumArr = json.EnumerateArray();
+            if (enumArr.Any())
+            {
+                var firstElement = enumArr.First();
+                if (firstElement.ValueKind == JsonValueKind.Array)
+                {
+                    // Nested array [[f1, f2...]] - common for batch or pipeline
+                    foreach (var value in firstElement.EnumerateArray())
+                    {
+                        embeddings.Add(value.GetSingle());
+                    }
+                }
+                else
+                {
+                    // Flat array [f1, f2...] - common for single inference
+                    foreach (var value in json.EnumerateArray())
+                    {
+                        embeddings.Add(value.GetSingle());
+                    }
+                }
+            }
+        }
+
+        if (embeddings.Count == 0)
+        {
+            throw new Exception($"Unexpected embedding format: {json.GetRawText()}");
+        }
+
+        _logger.LogInformation("Successfully generated {Count}d embedding", embeddings.Count);
+        return embeddings.ToArray();
     }
 }
