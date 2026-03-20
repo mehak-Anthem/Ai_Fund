@@ -32,8 +32,12 @@ public class SyncService : ISyncService
         try
         {
             _logger.LogInformation("Starting sync from SQL to Qdrant...");
+            _logger.LogInformation("MIGRATION: Deleting and recreating collection for 384-dimension change...");
 
-            // Ensure collection exists
+            // Delete existing collection to change dimensions
+            await _qdrantService.DeleteCollectionAsync();
+
+            // Ensure collection exists (with new 384 size)
             await _qdrantService.InitializeCollectionAsync();
 
             // Get all active knowledge from SQL

@@ -22,19 +22,19 @@ public class HuggingFaceEmbeddingService : IEmbeddingService
         
         try
         {
-            var model = configuration["HuggingFace:EmbeddingModel"] ?? "BAAI/bge-base-en-v1.5";
-            _modelUrl = $"https://api-inference.huggingface.co/models/{model}";
+            var model = configuration["HuggingFace:EmbeddingModel"] ?? "sentence-transformers/all-MiniLM-L6-v2";
+            _modelUrl = $"https://router.huggingface.co/hf-inference/models/{model}";
             
             var apiKey = configuration["HuggingFace:ApiKey"]?.Trim();
             if (!string.IsNullOrEmpty(apiKey))
             {
                 _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-                _httpClient.DefaultRequestHeaders.Add("X-Task", "feature-extraction");
-                _logger.LogInformation("HuggingFace API Key found and configured (starts with {Start}...)", apiKey.Substring(0, Math.Min(5, apiKey.Length)));
+                _httpClient.DefaultRequestHeaders.Add("X-Wait-For-Model", "true");
+                _logger.LogInformation("HuggingFace API Key configured for stable model: {Model}", model);
             }
             else
             {
-                _logger.LogWarning("NO HuggingFace API Key found in configuration! Check environment variables.");
+                _logger.LogWarning("NO HuggingFace API Key found! Sync will likely fail.");
             }
             
             _logger.LogInformation("HuggingFaceEmbeddingService initialized with model: {Model}", model);
@@ -51,8 +51,7 @@ public class HuggingFaceEmbeddingService : IEmbeddingService
         {
             var request = new 
             { 
-                inputs = text,
-                options = new { wait_for_model = true }
+                inputs = new[] { text }
             };
             int maxRetries = 3;
             int delayMs = 2000;

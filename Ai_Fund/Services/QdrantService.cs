@@ -54,6 +54,22 @@ public class QdrantService : IQdrantService
         }
     }
 
+    public async Task DeleteCollectionAsync()
+    {
+        try
+        {
+            if (await CollectionExistsAsync())
+            {
+                await _client.DeleteCollectionAsync(_collectionName);
+                _logger.LogInformation("Deleted Qdrant collection '{CollectionName}'", _collectionName);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting Qdrant collection");
+        }
+    }
+
     public async Task InitializeCollectionAsync()
     {
         try
@@ -66,7 +82,7 @@ public class QdrantService : IQdrantService
                     collectionName: _collectionName,
                     vectorsConfig: new VectorParams
                     {
-                        Size = 768, // nomic-embed-text dimension
+                        Size = 384, // all-MiniLM-L6-v2 dimension
                         Distance = Distance.Cosine
                     }
                 );

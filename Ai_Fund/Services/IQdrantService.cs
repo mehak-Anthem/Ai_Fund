@@ -6,6 +6,7 @@ public interface IQdrantService
     Task UpsertAsync(int id, float[] vector, string content, Dictionary<string, object>? metadata = null);
     Task<List<QdrantSearchResult>> SearchAsync(float[] queryVector, int limit = 3);
     Task<bool> CollectionExistsAsync();
+    Task DeleteCollectionAsync();
 }
 
 public class QdrantSearchResult
