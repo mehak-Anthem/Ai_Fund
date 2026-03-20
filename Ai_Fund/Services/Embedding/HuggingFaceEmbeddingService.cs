@@ -18,16 +18,20 @@ public class HuggingFaceEmbeddingService : IEmbeddingService
         _httpClient = new HttpClient();
         _httpClient.Timeout = TimeSpan.FromSeconds(30);
         
-        var model = configuration["HuggingFace:EmbeddingModel"] ?? "sentence-transformers/all-mpnet-base-v2";
-        _modelUrl = $"https://router.huggingface.co/hf-inference/models/{model}";
+        _logger = logger;
         
-        var apiKey = configuration["HuggingFace:ApiKey"]?.Trim();
-        if (!string.IsNullOrEmpty(apiKey))
+        try
         {
-            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-            _httpClient.DefaultRequestHeaders.Add("X-Task", "feature-extraction");
-            _logger.LogInformation("HuggingFace API Key found and configured (starts with {Start}...)", apiKey.Substring(0, Math.Min(5, apiKey.Length)));
-        }
+            var model = configuration["HuggingFace:EmbeddingModel"] ?? "sentence-transformers/all-mpnet-base-v2";
+            _modelUrl = $"https://router.huggingface.co/hf-inference/models/{model}";
+            
+            var apiKey = configuration["HuggingFace:ApiKey"]?.Trim();
+            if (!string.IsNullOrEmpty(apiKey))
+            {
+                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+                _httpClient.DefaultRequestHeaders.Add("X-Task", "feature-extraction");
+                _logger.LogInformation("HuggingFace API Key found and configured (starts with {Start}...)", apiKey.Substring(0, Math.Min(5, apiKey.Length)));
+            }
             else
             {
                 _logger.LogWarning("NO HuggingFace API Key found in configuration! Check environment variables.");
