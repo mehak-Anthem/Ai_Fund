@@ -19,7 +19,7 @@ public class HuggingFaceEmbeddingService : IEmbeddingService
         _httpClient.Timeout = TimeSpan.FromSeconds(30);
         
         var model = configuration["HuggingFace:EmbeddingModel"] ?? "sentence-transformers/all-mpnet-base-v2";
-        _modelUrl = $"https://api-inference.huggingface.co/models/{model}";
+        _modelUrl = $"https://router.huggingface.co/hf-inference/models/{model}";
         
         var apiKey = configuration["HuggingFace:ApiKey"];
         if (!string.IsNullOrEmpty(apiKey))
