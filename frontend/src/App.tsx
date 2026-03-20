@@ -7,7 +7,8 @@ import EmptyState from './components/EmptyState';
 import ChatInput from './components/ChatInput';
 import { Message, ChatResponse } from './types';
 
-const API_URL = 'https://localhost:44328/api/MutualFund/ask';
+const API_BASE = import.meta.env.VITE_API_URL || 'https://localhost:44328';
+const API_URL = `${API_BASE}/api/MutualFund/ask`;
 const USER_ID = '1';
 
 function App() {

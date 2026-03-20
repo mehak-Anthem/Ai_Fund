@@ -14,8 +14,8 @@ builder.Services.AddOpenApi();
 // Register services
 builder.Services.AddScoped<IMutualFundRepository, MutualFundRepository>();
 builder.Services.AddScoped<IMutualFundService, MutualFundService>();
-builder.Services.AddSingleton<IEmbeddingService, NomicEmbeddingService>();
-builder.Services.AddSingleton<ILLMService, OllamaLLMService>();
+builder.Services.AddSingleton<IEmbeddingService, HuggingFaceEmbeddingService>();
+builder.Services.AddSingleton<ILLMService, GroqLLMService>();
 builder.Services.AddScoped<IAiOrchestratorService, AiOrchestratorService>();
 builder.Services.AddScoped<IKnowledgeGapService, KnowledgeGapService>();
 builder.Services.AddSingleton<IQdrantService, QdrantService>();
@@ -48,14 +48,11 @@ builder.Services.AddSwaggerGen();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+app.MapOpenApi();
+app.UseSwagger();
+app.UseSwaggerUI();
 
-app.UseHttpsRedirection();
+// Note: HTTPS redirection removed — Render handles SSL termination at the edge
 
 // Use CORS
 app.UseCors("AllowAll");

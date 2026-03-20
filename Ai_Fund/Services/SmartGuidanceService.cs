@@ -159,6 +159,11 @@ Use these exact factual calculations in your response:
 Provide a conversational, easy-to-read response that shares these numbers natively.
 Add a note that {(returns.Type == "Market-linked" ? "returns may vary based on market performance." : "returns are relatively stable.")}
 Do not mention the prompt context. Be friendly!
+
+CRITICAL INSTRUCTIONS:
+- You must answer DIRECTLY. 
+- Do NOT generate a fake dialogue or transcript (e.g., NEVER use 'User:' or 'Miria:').
+- Do NOT introduce yourself. Just provide the answer.
 ";
         return await _llmService.GenerateStructuredAsync(prompt);
     }
@@ -216,6 +221,11 @@ Use these exact factual calculations:
 Difference Insight: They could earn roughly ₹{difference:N0} more in profit with {better}.
 
 Write a natural, conversational response sharing this comparison. Highlight the profitability difference, but also mention the difference in risk. Conclude with a helpful tip emphasizing they should choose based on their risk appetite and investment goals.
+
+CRITICAL INSTRUCTIONS:
+- You must answer DIRECTLY. 
+- Do NOT generate a fake dialogue or transcript (e.g., NEVER use 'User:' or 'Miria:').
+- Do NOT introduce yourself. Just provide the answer.
 ";
         return await _llmService.GenerateStructuredAsync(prompt);
     }
@@ -237,6 +247,11 @@ Use these exact calculations:
 
 Present this information naturally and conversationally.
 End with a note that FDs provide fixed, guaranteed returns, which is good for safety and short-term goals.
+
+CRITICAL INSTRUCTIONS:
+- You must answer DIRECTLY. 
+- Do NOT generate a fake dialogue or transcript (e.g., NEVER use 'User:' or 'Miria:').
+- Do NOT introduce yourself. Just provide the answer.
 ";
         return await _llmService.GenerateStructuredAsync(prompt);
     }
@@ -249,6 +264,11 @@ The user is asking generally about what kind of returns they can expect from inv
 Explain dynamically that returns depend on market conditions.
 Give a realistic example: ""A ₹5,000/month SIP for 10 years typically grows to roughly ₹10-12 lakh (assuming a historical return of ~12% annually).""
 Conclude with a tip that long-term investing gives better compounding results and SIP works best for 5+ years.
+
+CRITICAL INSTRUCTIONS:
+- You must answer DIRECTLY. 
+- Do NOT generate a fake dialogue or transcript (e.g., NEVER use 'User:' or 'Miria:').
+- Do NOT introduce yourself. Just provide the answer.
 ";
         return await _llmService.GenerateStructuredAsync(prompt);
     }
@@ -274,6 +294,11 @@ Use these exact mathematical facts in your response:
 
 Present this cleanly and dynamically. Mention that returns depend on the market but this is a realistic estimate based on historical averages.
 End with a tip that longer investment periods give substantially better compounding results.
+
+CRITICAL INSTRUCTIONS:
+- You must answer DIRECTLY. 
+- Do NOT generate a fake dialogue or transcript (e.g., NEVER use 'User:' or 'Miria:').
+- Do NOT introduce yourself. Just provide the answer.
 ";
         return await _llmService.GenerateStructuredAsync(prompt);
     }
@@ -307,6 +332,11 @@ Use this exact guidance strategy and format it into a natural, conversational re
 {allocationDetail}
 
 Do not perform new math. Structure the response engagingly.
+
+CRITICAL INSTRUCTIONS:
+- You must answer DIRECTLY. 
+- Do NOT generate a fake dialogue or transcript (e.g., NEVER use 'User:' or 'Miria:').
+- Do NOT introduce yourself. Just provide the answer.
 ";
         return await _llmService.GenerateStructuredAsync(prompt);
     }

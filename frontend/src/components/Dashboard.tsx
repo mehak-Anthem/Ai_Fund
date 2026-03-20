@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
+const API_BASE = import.meta.env.VITE_API_URL || 'https://localhost:44328';
+
 interface DashboardStats {
   totalQueries: number;
   knowledgeGaps: number;
@@ -34,7 +36,7 @@ const Dashboard: React.FC = () => {
 
   const loadDashboardData = async () => {
     try {
-      const response = await fetch('https://localhost:44328/api/KnowledgeGap/dashboard');
+      const response = await fetch(`${API_BASE}/api/KnowledgeGap/dashboard`);
       const data = await response.json();
 
       setStats({
@@ -54,7 +56,7 @@ const Dashboard: React.FC = () => {
 
   const syncQdrant = async () => {
     try {
-      const response = await fetch('https://localhost:44328/api/KnowledgeGap/sync-to-qdrant', {
+      const response = await fetch(`${API_BASE}/api/KnowledgeGap/sync-to-qdrant`, {
         method: 'POST',
       });
       if (response.ok) {

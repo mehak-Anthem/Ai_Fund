@@ -14,8 +14,21 @@ public class QdrantService : IQdrantService
         var host = configuration["Qdrant:Host"] ?? "localhost";
         var port = int.Parse(configuration["Qdrant:Port"] ?? "6334");
         _collectionName = configuration["Qdrant:CollectionName"] ?? "ai_fund_knowledge";
+        var apiKey = configuration["Qdrant:ApiKey"];
         
-        _client = new QdrantClient(host, port);
+        if (!string.IsNullOrEmpty(apiKey))
+        {
+            // Cloud Qdrant: connect via HTTPS with API key
+            _client = new QdrantClient(host, https: true, apiKey: apiKey);
+            logger.LogInformation("Connected to Qdrant Cloud at {Host}", host);
+        }
+        else
+        {
+            // Local Qdrant: connect via gRPC
+            _client = new QdrantClient(host, port);
+            logger.LogInformation("Connected to local Qdrant at {Host}:{Port}", host, port);
+        }
+        
         _logger = logger;
     }
 

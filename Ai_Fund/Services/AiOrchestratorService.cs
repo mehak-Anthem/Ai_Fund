@@ -712,6 +712,7 @@ public class AiOrchestratorService : IAiOrchestratorService
             response.Contains("Miria:", StringComparison.OrdinalIgnoreCase) ||
             response.Contains("Maria:", StringComparison.OrdinalIgnoreCase) ||
             response.Contains("Customer:", StringComparison.OrdinalIgnoreCase) ||
+            response.Contains("User:", StringComparison.OrdinalIgnoreCase) ||
             response.Contains("AI Fund Assistant", StringComparison.OrdinalIgnoreCase))
         {
             // Extract only the actual answer, skip dialogue
@@ -721,6 +722,7 @@ public class AiOrchestratorService : IAiOrchestratorService
                 !l.Contains("Miria:", StringComparison.OrdinalIgnoreCase) &&
                 !l.Contains("Maria:", StringComparison.OrdinalIgnoreCase) &&
                 !l.Contains("Customer:", StringComparison.OrdinalIgnoreCase) &&
+                !l.Contains("User:", StringComparison.OrdinalIgnoreCase) &&
                 !l.Contains("AI Fund Assistant", StringComparison.OrdinalIgnoreCase) &&
                 !l.Contains("Good morning", StringComparison.OrdinalIgnoreCase) &&
                 !l.Contains("How may I help", StringComparison.OrdinalIgnoreCase) &&
