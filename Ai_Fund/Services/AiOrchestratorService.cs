@@ -21,6 +21,7 @@ public class AiOrchestratorService : IAiOrchestratorService
     private readonly IComparisonService _comparisonService;
     private readonly IStructuredAnswerService _structuredAnswerService;
     private readonly ISmartGuidanceService _smartGuidanceService;
+    private readonly IQdrantService _qdrantService;
 
     public AiOrchestratorService(
         IMutualFundRepository repository,
@@ -35,7 +36,8 @@ public class AiOrchestratorService : IAiOrchestratorService
         IExpansionService expansionService,
         IComparisonService comparisonService,
         IStructuredAnswerService structuredAnswerService,
-        ISmartGuidanceService smartGuidanceService)
+        ISmartGuidanceService smartGuidanceService,
+        IQdrantService qdrantService)
     {
         _repository = repository;
         _embeddingService = embeddingService;
@@ -50,6 +52,7 @@ public class AiOrchestratorService : IAiOrchestratorService
         _comparisonService = comparisonService;
         _structuredAnswerService = structuredAnswerService;
         _smartGuidanceService = smartGuidanceService;
+        _qdrantService = qdrantService;
     }
 
     public async Task<ChatResponse> ProcessQueryAsync(string query, string userId)
@@ -230,9 +233,19 @@ public class AiOrchestratorService : IAiOrchestratorService
             // 6. Generate embedding
             var queryEmbedding = await _embeddingService.GenerateEmbeddingAsync(normalizedQuery);
 
-            // 7. Retrieve data (hybrid search)
-            var allData = await _repository.GetAllKnowledgeAsync();
-            var topMatches = RetrieveTopMatches(allData, queryEmbedding, normalizedQuery);
+            // 7. Retrieve data (Qdrant Cloud Search)
+            var qdrantResults = await _qdrantService.SearchAsync(queryEmbedding, limit: 3);
+            
+            // Map Qdrant results to local format for the rest of the pipeline
+            var topMatches = qdrantResults.Select(r => (
+                Data: new KnowledgeData 
+                { 
+                    Id = r.Id, 
+                    Question = r.Metadata?.ContainsKey("question") == true ? r.Metadata["question"].ToString() : "Direct Match",
+                    Answer = r.Content 
+                }, 
+                Score: (double)r.Score
+            )).ToList();
 
             // 8. Check if data found
             if (!topMatches.Any())

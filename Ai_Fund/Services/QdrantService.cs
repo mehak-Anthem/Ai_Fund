@@ -12,6 +12,12 @@ public class QdrantService : IQdrantService
     public QdrantService(IConfiguration configuration, ILogger<QdrantService> logger)
     {
         var host = configuration["Qdrant:Host"] ?? "localhost";
+        
+        // Normalize host: strip https:// or http:// if present
+        host = host.Replace("https://", "", StringComparison.OrdinalIgnoreCase)
+                   .Replace("http://", "", StringComparison.OrdinalIgnoreCase)
+                   .TrimEnd('/');
+
         var port = int.Parse(configuration["Qdrant:Port"] ?? "6334");
         _collectionName = configuration["Qdrant:CollectionName"] ?? "ai_fund_knowledge";
         var apiKey = configuration["Qdrant:ApiKey"];
@@ -20,13 +26,15 @@ public class QdrantService : IQdrantService
         {
             // Cloud Qdrant: connect via HTTPS with API key
             _client = new QdrantClient(host, https: true, apiKey: apiKey);
-            logger.LogInformation("Connected to Qdrant Cloud at {Host}", host);
+            _logger = logger;
+            _logger.LogInformation("Connected to Qdrant Cloud at {Host}", host);
         }
         else
         {
             // Local Qdrant: connect via gRPC
             _client = new QdrantClient(host, port);
-            logger.LogInformation("Connected to local Qdrant at {Host}:{Port}", host, port);
+            _logger = logger;
+            _logger.LogInformation("Connected to local Qdrant at {Host}:{Port}", host, port);
         }
         
         _logger = logger;
