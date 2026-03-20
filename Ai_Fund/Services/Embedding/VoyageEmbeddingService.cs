@@ -1,5 +1,6 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
+using System.Linq;
 
 namespace Ai_Fund.Services.Embedding;
 
