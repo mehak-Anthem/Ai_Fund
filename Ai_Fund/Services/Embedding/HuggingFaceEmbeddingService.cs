@@ -21,19 +21,27 @@ public class HuggingFaceEmbeddingService : IEmbeddingService
         var model = configuration["HuggingFace:EmbeddingModel"] ?? "sentence-transformers/all-mpnet-base-v2";
         _modelUrl = $"https://router.huggingface.co/hf-inference/models/{model}";
         
-        var apiKey = configuration["HuggingFace:ApiKey"];
-        if (!string.IsNullOrEmpty(apiKey))
-        {
-            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-            _logger.LogInformation("HuggingFace API Key found and configured (starts with {Start}...)", apiKey.Substring(0, Math.Min(5, apiKey.Length)));
-        }
-        else
-        {
-            _logger.LogWarning("NO HuggingFace API Key found in configuration! Check environment variables.");
-        }
-        
         _logger = logger;
-        _logger.LogInformation("HuggingFaceEmbeddingService initialized with model: {Model}", model);
+        
+        try
+        {
+            var apiKey = configuration["HuggingFace:ApiKey"];
+            if (!string.IsNullOrEmpty(apiKey))
+            {
+                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+                _logger.LogInformation("HuggingFace API Key found and configured (starts with {Start}...)", apiKey.Substring(0, Math.Min(5, apiKey.Length)));
+            }
+            else
+            {
+                _logger.LogWarning("NO HuggingFace API Key found in configuration! Check environment variables.");
+            }
+            
+            _logger.LogInformation("HuggingFaceEmbeddingService initialized with model: {Model}", model);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error initializing HuggingFaceEmbeddingService");
+        }
     }
 
     public async Task<float[]> GenerateEmbeddingAsync(string text)
