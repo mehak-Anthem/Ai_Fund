@@ -56,37 +56,14 @@ public class SyncService : ISyncService
                         continue;
                     }
 
-                    // Get or generate embedding (MUST be float[768])
-                    float[] embedding;
+                    // ALWAYS regenerate embedding because we switched models (from Nomic/Ollama to HuggingFace)
+                    _logger.LogInformation("Generating fresh HuggingFace embedding for ID {Id}", item.Id);
+                    var normalizedQuestion = TextNormalizer.Normalize(item.Question);
+                    var embedding = await _embeddingService.GenerateEmbeddingAsync(normalizedQuestion);
                     
-                    if (!string.IsNullOrEmpty(item.Embedding))
-                    {
-                        // Use existing embedding from SQL
-                        embedding = System.Text.Json.JsonSerializer.Deserialize<float[]>(item.Embedding) ?? Array.Empty<float>();
-                        
-                        // Verify vector size is 768
-                        if (embedding.Length != 768)
-                        {
-                            _logger.LogWarning("ID {Id}: Invalid embedding size {Size}, regenerating...", item.Id, embedding.Length);
-                            var normalizedQuestion = TextNormalizer.Normalize(item.Question);
-                            embedding = await _embeddingService.GenerateEmbeddingAsync(normalizedQuestion);
-                            
-                            // Save back to SQL
-                            var embeddingJson = System.Text.Json.JsonSerializer.Serialize(embedding);
-                            await _repository.UpdateEmbeddingAsync(item.Id, embeddingJson);
-                        }
-                    }
-                    else
-                    {
-                        // Generate new embedding
-                        _logger.LogInformation("Generating embedding for ID {Id}", item.Id);
-                        var normalizedQuestion = TextNormalizer.Normalize(item.Question);
-                        embedding = await _embeddingService.GenerateEmbeddingAsync(normalizedQuestion);
-                        
-                        // Save embedding back to SQL
-                        var embeddingJson = System.Text.Json.JsonSerializer.Serialize(embedding);
-                        await _repository.UpdateEmbeddingAsync(item.Id, embeddingJson);
-                    }
+                    // Save fresh embedding back to SQL
+                    var embeddingJson = System.Text.Json.JsonSerializer.Serialize(embedding);
+                    await _repository.UpdateEmbeddingAsync(item.Id, embeddingJson);
 
                     // Prepare metadata
                     var metadata = new Dictionary<string, object>

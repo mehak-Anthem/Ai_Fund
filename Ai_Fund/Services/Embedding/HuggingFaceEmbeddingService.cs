@@ -19,7 +19,7 @@ public class HuggingFaceEmbeddingService : IEmbeddingService
         _httpClient.Timeout = TimeSpan.FromSeconds(30);
         
         var model = configuration["HuggingFace:EmbeddingModel"] ?? "sentence-transformers/all-mpnet-base-v2";
-        _modelUrl = $"https://api-inference.huggingface.co/pipeline/feature-extraction/{model}";
+        _modelUrl = $"https://api-inference.huggingface.co/models/{model}";
         
         var apiKey = configuration["HuggingFace:ApiKey"];
         if (!string.IsNullOrEmpty(apiKey))
@@ -59,11 +59,34 @@ public class HuggingFaceEmbeddingService : IEmbeddingService
 
             var json = await response.Content.ReadFromJsonAsync<JsonElement>();
             
-            // HuggingFace returns a flat array of floats for single input
+            // HuggingFace can return a flat array [f1, f2...] or a nested array [[f1, f2...]]
             var embeddings = new List<float>();
-            foreach (var value in json.EnumerateArray())
+            
+            if (json.ValueKind == JsonValueKind.Array)
             {
-                embeddings.Add(value.GetSingle());
+                var firstElement = json.EnumerateArray().First();
+                
+                if (firstElement.ValueKind == JsonValueKind.Array)
+                {
+                    // Nested array [[...]]
+                    foreach (var value in firstElement.EnumerateArray())
+                    {
+                        embeddings.Add(value.GetSingle());
+                    }
+                }
+                else
+                {
+                    // Flat array [...]
+                    foreach (var value in json.EnumerateArray())
+                    {
+                        embeddings.Add(value.GetSingle());
+                    }
+                }
+            }
+            
+            if (embeddings.Count == 0)
+            {
+                _logger.LogWarning("HuggingFace returned empty or unexpected format: {Raw}", json.GetRawText());
             }
             
             return embeddings.ToArray();
