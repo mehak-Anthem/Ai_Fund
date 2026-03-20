@@ -82,7 +82,7 @@ public class QdrantService : IQdrantService
                     collectionName: _collectionName,
                     vectorsConfig: new VectorParams
                     {
-                        Size = 384, // all-MiniLM-L6-v2 dimension
+                        Size = 1024, // Voyage-3 dimension
                         Distance = Distance.Cosine
                     }
                 );
