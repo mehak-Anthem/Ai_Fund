@@ -65,7 +65,7 @@ public class SyncService : ISyncService
 
                     // ALWAYS regenerate embedding for Voyage (1024d)
                     var normalizedQuestion = TextNormalizer.Normalize(item.Question);
-                    var embedding = await _embeddingService.GenerateEmbeddingAsync(normalizedQuestion, "passage");
+                    var embedding = await _embeddingService.GenerateEmbeddingAsync(normalizedQuestion);
                     
                     if (embedding.All(v => v == 0))
                     {
@@ -92,8 +92,8 @@ public class SyncService : ISyncService
 
                     _logger.LogInformation(">>> SYNC SUCCESS (ID={Id})", item.Id);
                     
-                    // Add a small delay to avoid hitting Voyage rate limits (bulk)
-                    await Task.Delay(200);
+                    // Add a large delay (21s) to stay under the 3 RPM limit for free tier
+                    await Task.Delay(21000);
                 }
                 catch (Exception ex)
                 {

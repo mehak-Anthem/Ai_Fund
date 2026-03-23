@@ -82,7 +82,7 @@ public class QdrantService : IQdrantService
                     collectionName: _collectionName,
                     vectorsConfig: new VectorParams
                     {
-                        Size = 4096, // NVIDIA nv-embed-v1 dimension
+                        Size = 1024, // Voyage AI dimension
                         Distance = Distance.Cosine
                     }
                 );

@@ -14,7 +14,7 @@ builder.Services.AddOpenApi();
 // Register services
 builder.Services.AddScoped<IMutualFundRepository, MutualFundRepository>();
 builder.Services.AddScoped<IMutualFundService, MutualFundService>();
-builder.Services.AddSingleton<IEmbeddingService, NvidiaEmbeddingService>();
+builder.Services.AddSingleton<IEmbeddingService, GeminiEmbeddingService>();
 builder.Services.AddSingleton<ILLMService, GroqLLMService>();
 builder.Services.AddScoped<IAiOrchestratorService, AiOrchestratorService>();
 builder.Services.AddScoped<IKnowledgeGapService, KnowledgeGapService>();
