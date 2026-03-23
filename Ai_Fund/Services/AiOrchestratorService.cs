@@ -81,6 +81,21 @@ public class AiOrchestratorService : IAiOrchestratorService
                 return CreateResponse("I'm doing great 😊 How can I help you with mutual funds today?", "Static", 1.0, "GREETING");
             }
 
+            if (lowerQuery.Contains("who are you") || lowerQuery.Contains("who are u") || 
+                lowerQuery.Contains("what are you") || lowerQuery.Contains("what are u") ||
+                lowerQuery == "who r u" || lowerQuery == "what r u" ||
+                lowerQuery.Contains("what can you do") || lowerQuery.Contains("what can u do"))
+            {
+                var identityPrompt = "Knowledge Base: I am FundAI, a smart and helpful mutual fund assistant. I can help with SIP calculations, comparing investments (FD vs SIP, etc.), and providing personalized guidance.";
+                var identityAnswer = await _llmService.AskLLMAsync(identityPrompt, originalQuery, new List<ChatMessage>(), false, false, "");
+                
+                // Clean and format using existing service logic
+                identityAnswer = CleanResponse(identityAnswer);
+                identityAnswer = _personalityService.ApplyPersonality(identityAnswer);
+                
+                return CreateResponse(identityAnswer, "LLM-Dynamic", 1.0, "IDENTITY");
+            }
+
             // 3. Resolve follow-up queries with context
             var originalQuery = query;
             var isExpansion = _expansionService.IsExpansionQuery(query);
