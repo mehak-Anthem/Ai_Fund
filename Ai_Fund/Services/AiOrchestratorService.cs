@@ -67,6 +67,7 @@ public class AiOrchestratorService : IAiOrchestratorService
 
             // 2. Normalize input (fix typos)
             query = InputNormalizer.NormalizeInput(query);
+            var originalQuery = query;
             _logger.LogInformation("Normalized query: {Query}", query);
 
             // 2.5. Handle greetings EARLY (before RAG)
@@ -97,7 +98,6 @@ public class AiOrchestratorService : IAiOrchestratorService
             }
 
             // 3. Resolve follow-up queries with context
-            var originalQuery = query;
             var isExpansion = _expansionService.IsExpansionQuery(query);
             var isComparison = _comparisonService.IsComparisonQuery(query);
             
