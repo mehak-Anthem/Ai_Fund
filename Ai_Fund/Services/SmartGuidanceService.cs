@@ -56,6 +56,30 @@ public class SmartGuidanceService : ISmartGuidanceService
 
     public int ExtractAmount(string query)
     {
+        query = query.ToLower().Replace(",", "");
+        
+        // Handle "X lakh"
+        var lakhMatch = Regex.Match(query, @"(\d+(\.\d+)?)\s*lakh");
+        if (lakhMatch.Success)
+        {
+            return (int)(double.Parse(lakhMatch.Groups[1].Value) * 100000);
+        }
+        
+        // Handle "X crore" or "X cr"
+        var croreMatch = Regex.Match(query, @"(\d+(\.\d+)?)\s*(crore|cr)");
+        if (croreMatch.Success)
+        {
+            return (int)(double.Parse(croreMatch.Groups[1].Value) * 10000000);
+        }
+        
+        // Handle "X k" or "X thousand"
+        var thousandMatch = Regex.Match(query, @"(\d+(\.\d+)?)\s*(k|thousand)");
+        if (thousandMatch.Success)
+        {
+            return (int)(double.Parse(thousandMatch.Groups[1].Value) * 1000);
+        }
+        
+        // Handle pure numbers (e.g., 100000)
         var match = Regex.Match(query, @"\d+");
         return match.Success ? int.Parse(match.Value) : 0;
     }
@@ -305,38 +329,27 @@ CRITICAL INSTRUCTIONS:
 
     public async Task<string> GenerateInvestmentAdviceAsync(int amount)
     {
-        string allocationDetail = "";
-        
-        if (amount >= 10000)
-        {
-            var half = amount / 2;
-            allocationDetail = $@"Balance safety and growth for investment of ₹{amount:N0}. A simple approach is: ₹{half:N0} in FD for safe stable returns, and ₹{half:N0} in SIP for growth over time. Use FD for short-term needs and SIP for long-term.";
-        }
-        else if (amount >= 5000)
-        {
-            allocationDetail = $@"For an investment of ₹{amount:N0}, a SIP is a good starting option for long-term growth. Advise them to start with a ₹{amount:N0}/month SIP and stay invested for at least 5-10 years. Emphasize that consistency matters more than the initial amount.";
-        }
-        else if (amount > 0)
-        {
-            allocationDetail = $@"For ₹{amount:N0}, they can still start small with a SIP. Recommend beginning with ₹{amount:N0}/month and increasing the investment gradually as income grows. Emphasize that starting early is more important than starting big.";
-        }
-
-        if(string.IsNullOrEmpty(allocationDetail))
-             return string.Empty;
-
         var prompt = $@"
-You are Miria, a friendly financial assistant providing guidance.
-The user wants advice on how to invest ₹{amount:N0}.
-Use this exact guidance strategy and format it into a natural, conversational response:
+You are Miria, a friendly and knowledgeable financial assistant.
+The user wants advice on how to invest ₹{amount:N0}. 
 
-{allocationDetail}
+Instead of a generic 50/50 split, provide a DYNAMIC and personalized investment strategy.
+Consider the amount:
+- If small (under 10k), suggest starting with a single SIP and consistency.
+- If medium (10k - 1 Lakh), suggest a mix of Large Cap Mutual Funds and perhaps a safe FD or Liquid Fund.
+- If large (above 1 Lakh), suggest a diversified portfolio including:
+    - 50-60% in Multi-cap or Index Funds for growth.
+    - 20-30% in Debt/FDs for stability.
+    - 10-20% in Gold or International Funds for diversification.
 
-Do not perform new math. Structure the response engagingly.
+Format your response engagingly and practically. Explain WHY this allocation works for ₹{amount:N0}.
+End with a practical next step (e.g., ""Start your first SIP this month"").
 
 CRITICAL INSTRUCTIONS:
 - You must answer DIRECTLY. 
 - Do NOT generate a fake dialogue or transcript (e.g., NEVER use 'User:' or 'Miria:').
 - Do NOT introduce yourself. Just provide the answer.
+- Focus on the total amount: ₹{amount:N0}.
 ";
         return await _llmService.GenerateStructuredAsync(prompt);
     }
