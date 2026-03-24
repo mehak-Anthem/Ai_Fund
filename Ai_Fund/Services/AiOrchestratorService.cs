@@ -177,7 +177,25 @@ public class AiOrchestratorService : IAiOrchestratorService
                 return cachedResponse;
             }
 
-            // 9. Search and Scale
+            // 9. Live Data Lookup (MFAPI) - PRE-SEARCH check
+            string liveDataContext = "";
+            if (intent == "MF_SPECIFIC" || query.Split(' ').Length > 3)
+            {
+                var searchTerm = ExtractFundName(query);
+                var mfSearch = await _mfApiService.SearchSchemesAsync(searchTerm);
+                if (mfSearch != null && mfSearch.Any())
+                {
+                    var bestScheme = mfSearch.First();
+                    var latestNav = await _mfApiService.GetLatestNavAsync(bestScheme.SchemeCode);
+                    if (latestNav != null)
+                    {
+                        liveDataContext = $"\n\nLIVE DATA for {bestScheme.SchemeName} (Code: {bestScheme.SchemeCode}):\nLatest NAV: {latestNav.Nav} as of {latestNav.Date}";
+                        _logger.LogInformation(">>> LIVE DATA FOUND: {Fund}", bestScheme.SchemeName);
+                    }
+                }
+            }
+
+            // 9.5. Search and Scale
             var normalizedText = TextNormalizer.Normalize(query);
             var queryEmbedding = await _embeddingService.GenerateEmbeddingAsync(normalizedText);
             var searchResults = await _qdrantService.SearchAsync(queryEmbedding, limit: 3);
@@ -192,37 +210,15 @@ public class AiOrchestratorService : IAiOrchestratorService
                 Score: (double)r.Score
             )).ToList();
 
-            if (!topMatches.Any())
+            if (!topMatches.Any() && string.IsNullOrEmpty(liveDataContext))
             {
                 await _gapService.LogGapAsync(query, intent, 0);
                 var clarification = await _llmService.AskLLMAsync("Suggest categories like SIP, comparisons, or fund basics.", originalQuery, new List<ChatMessage>(), false, false, "");
                 return CreateResponse(CleanResponse(clarification), "LLM-Dynamic", 0, intent);
             }
 
-            // 9.5. Live Data Lookup (MFAPI) - If intent is MF_SPECIFIC or query looks like a fund name
-            string liveDataContext = "";
-            if (intent == "MF_SPECIFIC" || query.Split(' ').Length > 3)
-            {
-                var searchTerm = ExtractFundName(query);
-                _logger.LogInformation("Searching MFAPI with term: {SearchTerm}", searchTerm);
-                
-                var mfSearch = await _mfApiService.SearchSchemesAsync(searchTerm);
-                if (mfSearch != null && mfSearch.Any())
-                {
-                    var bestScheme = mfSearch.First();
-                    // If we found a match, get better data
-                    var latestNav = await _mfApiService.GetLatestNavAsync(bestScheme.SchemeCode);
-                    if (latestNav != null)
-                    {
-                        liveDataContext = $"\n\nLIVE DATA for {bestScheme.SchemeName} (Code: {bestScheme.SchemeCode}):\nLatest NAV: {latestNav.Nav} as of {latestNav.Date}";
-                        _logger.LogInformation("Added live data to context for {Fund}", bestScheme.SchemeName);
-                    }
-                }
-            }
-
             var topic = ExtractTopic(query);
             var richContext = _contextManager.GetRichContext(userId);
-
             // 10. Handlers (Comparison / Guidance / Structured / RAG)
             if (isComparison)
             {
@@ -267,7 +263,8 @@ public class AiOrchestratorService : IAiOrchestratorService
             var guarded = await ApplyGuardrailsDynamic(aiResponse, originalQuery);
             if (guarded != null) return guarded;
 
-            var finalResponse = CreateResponse(aiResponse, "RAG+LLM", ScaleConfidence(topMatches[0].Score), intent);
+            var source = string.IsNullOrEmpty(liveDataContext) ? "RAG+LLM" : "Live+RAG+LLM";
+            var finalResponse = CreateResponse(aiResponse, source, ScaleConfidence(topMatches.Count > 0 ? topMatches[0].Score : 0.9), intent);
             
             // Save and Cache
             await _repository.SaveChatHistoryAsync(new Models.ChatHistory { UserId = userId, Role = "Assistant", Message = aiResponse, CreatedDate = DateTime.UtcNow });

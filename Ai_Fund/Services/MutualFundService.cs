@@ -110,6 +110,23 @@ public class MutualFundService : IMutualFundService
 
         // Generate embedding for the normalized query
         var queryEmbedding = await _embeddingService.GenerateEmbeddingAsync(normalizedQuery);
+
+        // Live Data Lookup (MFAPI)
+        string liveDataContext = "";
+        if (intent == "MF_SPECIFIC" || (query.Split(' ').Length > 3 && query.ToLower().Contains("fund")))
+        {
+            var searchTerm = ExtractFundName(query);
+            var mfSearch = await _mfApiService.SearchSchemesAsync(searchTerm);
+            if (mfSearch != null && mfSearch.Any())
+            {
+                var bestScheme = mfSearch.First();
+                var latestNav = await _mfApiService.GetLatestNavAsync(bestScheme.SchemeCode);
+                if (latestNav != null)
+                {
+                    liveDataContext = $"\n\nLIVE DATA for {bestScheme.SchemeName} (Code: {bestScheme.SchemeCode}):\nLatest NAV: {latestNav.Nav} as of {latestNav.Date}";
+                }
+            }
+        }
         
         // Get all knowledge from database
         var allData = await _repository.GetAllKnowledgeAsync();
@@ -149,7 +166,7 @@ public class MutualFundService : IMutualFundService
             return new Models.ChatResponse
             {
                 Answer = noInfoResponse,
-                Source = "System",
+                Source = string.IsNullOrEmpty(liveDataContext) ? "System" : "Live+System",
                 Confidence = 0,
                 Intent = intent
             };
@@ -160,22 +177,6 @@ public class MutualFundService : IMutualFundService
                 .Select(x => x.Data.Answer)
                 .Distinct());
 
-        // Live Data Lookup (MFAPI)
-        string liveDataContext = "";
-        if (intent == "MF_SPECIFIC" || (query.Split(' ').Length > 3 && query.ToLower().Contains("fund")))
-        {
-            var searchTerm = ExtractFundName(query);
-            var mfSearch = await _mfApiService.SearchSchemesAsync(searchTerm);
-            if (mfSearch != null && mfSearch.Any())
-            {
-                var bestScheme = mfSearch.First();
-                var latestNav = await _mfApiService.GetLatestNavAsync(bestScheme.SchemeCode);
-                if (latestNav != null)
-                {
-                    liveDataContext = $"\n\nLIVE DATA for {bestScheme.SchemeName} (Code: {bestScheme.SchemeCode}):\nLatest NAV: {latestNav.Nav} as of {latestNav.Date}";
-                }
-            }
-        }
 
         // For simple definitions, return direct answer
         if (intent == "DEFINITION" && topMatches.Count > 0 && topMatches[0].Score > 0.8)
@@ -224,8 +225,8 @@ public class MutualFundService : IMutualFundService
         return new Models.ChatResponse
         {
             Answer = aiResponse,
-            Source = "RAG+LLM",
-            Confidence = topMatches.Count > 0 ? topMatches[0].Score : 0,
+            Source = string.IsNullOrEmpty(liveDataContext) ? "RAG+LLM" : "Live+RAG+LLM",
+            Confidence = topMatches.Count > 0 ? topMatches[0].Score : 0.9,
             Intent = intent
         };
     }
