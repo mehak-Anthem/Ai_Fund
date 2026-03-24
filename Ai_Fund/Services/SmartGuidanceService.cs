@@ -6,7 +6,7 @@ public interface ISmartGuidanceService
 {
     bool IsPersonalQuery(string query);
     Task<string> GenerateGuidedAnswerAsync(string query, string context);
-    int ExtractAmount(string query);
+    Task<int> ExtractAmount(string query);
     int ExtractYears(string query);
     string ExtractInvestmentType(string query);
     Task<string> GenerateInvestmentAdviceAsync(int amount);
@@ -24,10 +24,12 @@ public interface ISmartGuidanceService
 public class SmartGuidanceService : ISmartGuidanceService
 {
     private readonly ILLMService _llmService;
+    private readonly ICurrencyService _currencyService;
 
-    public SmartGuidanceService(ILLMService llmService)
+    public SmartGuidanceService(ILLMService llmService, ICurrencyService currencyService)
     {
         _llmService = llmService;
+        _currencyService = currencyService;
     }
 
     public bool IsPersonalQuery(string query)
@@ -56,7 +58,7 @@ public class SmartGuidanceService : ISmartGuidanceService
                (query.Contains("i") && query.Contains("invest") && query.Contains("return"));
     }
 
-    public int ExtractAmount(string query)
+    public async Task<int> ExtractAmount(string query)
     {
         query = query.ToLower().Replace(",", "");
         
@@ -71,8 +73,10 @@ public class SmartGuidanceService : ISmartGuidanceService
             if (multiplier == "lakh") val *= 100000;
             if (multiplier == "crore" || multiplier == "cr") val *= 10000000;
             
+            
             // Convert to INR for internal logic (approx rate 83.5)
-            return (int)(val * 83.5);
+            var rate = await _currencyService.GetUsdToInrRateAsync();
+            return (int)(val * rate);
         }
 
         // Handle "X lakh"
@@ -384,6 +388,7 @@ CRITICAL INSTRUCTIONS:
 
     public async Task<string> GenerateGoalPlanningAsync(string query)
     {
+        var usdToInr = await _currencyService.GetUsdToInrRateAsync();
         var prompt = $@"
 You are Miria, a smart and helpful financial assistant.
 The user is asking a goal-planning question about reaching a target amount.
@@ -393,7 +398,7 @@ User Question: {query}
 TASK:
 1. Extract the 'Target Amount' (the goal) and the 'Saving Amount' (SIP).
 2. Use an estimated 10-12% annual return for mutual funds (SIP).
-3. If currencies are mixed (e.g., saving in ₹ for a $ target), use a current approximate exchange rate of 1 USD = ₹83.5.
+3. If currencies are mixed (e.g., saving in ₹ for a $ target), use a current approximate exchange rate of 1 USD = ₹{usdToInr:F1}.
 4. Calculate (roughly) the number of years required. 
    - Formula hint: FV = P * [((1 + r)^n - 1) / r]. Solve for n.
 5. Provide a step-by-step conversational explanation.

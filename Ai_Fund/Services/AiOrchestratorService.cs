@@ -23,6 +23,7 @@ public class AiOrchestratorService : IAiOrchestratorService
     private readonly ISmartGuidanceService _smartGuidanceService;
     private readonly IQdrantService _qdrantService;
     private readonly IMfApiService _mfApiService;
+    private readonly ICurrencyService _currencyService;
 
     public AiOrchestratorService(
         IMutualFundRepository repository,
@@ -39,7 +40,8 @@ public class AiOrchestratorService : IAiOrchestratorService
         IStructuredAnswerService structuredAnswerService,
         ISmartGuidanceService smartGuidanceService,
         IQdrantService qdrantService,
-        IMfApiService mfApiService)
+        IMfApiService mfApiService,
+        ICurrencyService currencyService)
     {
         _repository = repository;
         _embeddingService = embeddingService;
@@ -56,6 +58,7 @@ public class AiOrchestratorService : IAiOrchestratorService
         _smartGuidanceService = smartGuidanceService;
         _qdrantService = qdrantService;
         _mfApiService = mfApiService;
+        _currencyService = currencyService;
     }
 
     public async Task<ChatResponse> ProcessQueryAsync(string query, string userId)
@@ -92,7 +95,8 @@ public class AiOrchestratorService : IAiOrchestratorService
                 lowerQuery.Contains("what kind of ai") || lowerQuery.Contains("what r you") ||
                 lowerQuery.Contains("what can you do") || lowerQuery.Contains("what can u do"))
             {
-                var identityPrompt = "Knowledge Base: I am FundAI, a smart and helpful mutual fund assistant. I can help with SIP calculations, comparing investments (FD vs SIP, etc.), and providing personalized guidance. I also know that 1 USD is currently approx ₹83.5. I am designed to simplify financial planning for everyone.";
+                var usdToInr = await _currencyService.GetUsdToInrRateAsync();
+                var identityPrompt = $"Knowledge Base: I am FundAI, a smart and helpful mutual fund assistant. I can help with SIP calculations, comparing investments (FD vs SIP, etc.), and providing personalized guidance. I also know that 1 USD is currently approx ₹{usdToInr:F1}. I am designed to simplify financial planning for everyone.";
                 var identityAnswer = await _llmService.AskLLMAsync(identityPrompt, originalQuery, new List<ChatMessage>(), false, false, "");
                 
                 identityAnswer = CleanResponse(identityAnswer);
@@ -197,17 +201,21 @@ public class AiOrchestratorService : IAiOrchestratorService
 
             // 9.5. Live Data Lookup (MFAPI) - If intent is MF_SPECIFIC or query looks like a fund name
             string liveDataContext = "";
-            if (intent == "MF_SPECIFIC" || query.Split(' ').Length > 3) // Basic heuristic for fund name
+            if (intent == "MF_SPECIFIC" || query.Split(' ').Length > 3)
             {
-                var mfSearch = await _mfApiService.SearchSchemesAsync(query);
+                var searchTerm = ExtractFundName(query);
+                _logger.LogInformation("Searching MFAPI with term: {SearchTerm}", searchTerm);
+                
+                var mfSearch = await _mfApiService.SearchSchemesAsync(searchTerm);
                 if (mfSearch != null && mfSearch.Any())
                 {
                     var bestScheme = mfSearch.First();
+                    // If we found a match, get better data
                     var latestNav = await _mfApiService.GetLatestNavAsync(bestScheme.SchemeCode);
                     if (latestNav != null)
                     {
                         liveDataContext = $"\n\nLIVE DATA for {bestScheme.SchemeName} (Code: {bestScheme.SchemeCode}):\nLatest NAV: {latestNav.Nav} as of {latestNav.Date}";
-                        _logger.LogInformation("Added live data to context: {LiveData}", liveDataContext);
+                        _logger.LogInformation("Added live data to context for {Fund}", bestScheme.SchemeName);
                     }
                 }
             }
@@ -219,8 +227,8 @@ public class AiOrchestratorService : IAiOrchestratorService
             if (isComparison)
             {
                 var entities = _comparisonService.ExtractAllEntities(query);
-                var amount = _smartGuidanceService.ExtractAmount(originalQuery);
-                if (amount == 0 && richContext != null) amount = _smartGuidanceService.ExtractAmount(richContext.LastUserQuery);
+                var amount = await _smartGuidanceService.ExtractAmount(originalQuery);
+                if (amount == 0 && richContext != null) amount = await _smartGuidanceService.ExtractAmount(richContext.LastUserQuery);
                 
                 if (entities.Count >= 2 && amount > 0)
                 {
@@ -241,7 +249,7 @@ public class AiOrchestratorService : IAiOrchestratorService
                 if (_smartGuidanceService.IsReturnsQuery(originalQuery))
                 {
                     var type = _smartGuidanceService.ExtractInvestmentType(originalQuery);
-                    var amt = _smartGuidanceService.ExtractAmount(originalQuery);
+                    var amt = await _smartGuidanceService.ExtractAmount(originalQuery);
                     if (amt > 0 && !string.IsNullOrEmpty(type))
                     {
                         var res = await _smartGuidanceService.GenerateUniversalReturnsAsync(type, amt, 1);
@@ -302,6 +310,38 @@ public class AiOrchestratorService : IAiOrchestratorService
     private string BuildContext(List<(KnowledgeData Data, double Score)> matches)
     {
         return string.Join("\n\n", matches.Select(m => $"Answer: {m.Data.Answer}"));
+    }
+
+    private string ExtractFundName(string query)
+    {
+        var cleaned = query.ToLower();
+        string[] prefixes = { 
+            "what is the latest nav of", 
+            "what is the nav of", 
+            "latest nav of", 
+            "nav of", 
+            "current price of", 
+            "how is", 
+            "doing", 
+            "search for", 
+            "tell me about",
+            "show me",
+            "what is"
+        };
+
+        foreach (var prefix in prefixes)
+        {
+            if (cleaned.StartsWith(prefix))
+            {
+                cleaned = cleaned.Substring(prefix.Length).Trim();
+            }
+            cleaned = cleaned.Replace(prefix, "").Trim();
+        }
+
+        // Remove trailing "fund" or "scheme" if present to make search broader
+        cleaned = cleaned.Replace("latest nav", "").Trim();
+        
+        return cleaned;
     }
 
     private double ScaleConfidence(double rawScore)

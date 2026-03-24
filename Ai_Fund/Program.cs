@@ -28,6 +28,7 @@ builder.Services.AddSingleton<IComparisonService, ComparisonService>();
 builder.Services.AddScoped<IStructuredAnswerService, StructuredAnswerService>();
 builder.Services.AddScoped<ISmartGuidanceService, SmartGuidanceService>();
 builder.Services.AddHttpClient<IMfApiService, MfApiService>();
+builder.Services.AddHttpClient<ICurrencyService, CurrencyService>();
 
 // Add memory cache
 builder.Services.AddMemoryCache();

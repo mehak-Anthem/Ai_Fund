@@ -164,7 +164,8 @@ public class MutualFundService : IMutualFundService
         string liveDataContext = "";
         if (intent == "MF_SPECIFIC" || (query.Split(' ').Length > 3 && query.ToLower().Contains("fund")))
         {
-            var mfSearch = await _mfApiService.SearchSchemesAsync(query);
+            var searchTerm = ExtractFundName(query);
+            var mfSearch = await _mfApiService.SearchSchemesAsync(searchTerm);
             if (mfSearch != null && mfSearch.Any())
             {
                 var bestScheme = mfSearch.First();
@@ -227,5 +228,36 @@ public class MutualFundService : IMutualFundService
             Confidence = topMatches.Count > 0 ? topMatches[0].Score : 0,
             Intent = intent
         };
+    }
+
+    private string ExtractFundName(string query)
+    {
+        var cleaned = query.ToLower();
+        string[] prefixes = { 
+            "what is the latest nav of", 
+            "what is the nav of", 
+            "latest nav of", 
+            "nav of", 
+            "current price of", 
+            "how is", 
+            "doing", 
+            "search for", 
+            "tell me about",
+            "show me",
+            "what is"
+        };
+
+        foreach (var prefix in prefixes)
+        {
+            if (cleaned.StartsWith(prefix))
+            {
+                cleaned = cleaned.Substring(prefix.Length).Trim();
+            }
+            cleaned = cleaned.Replace(prefix, "").Trim();
+        }
+
+        cleaned = cleaned.Replace("latest nav", "").Trim();
+        
+        return cleaned;
     }
 }
