@@ -32,10 +32,13 @@ public class MarketAuxService : IMarketNewsService
     {
         var lower = query.ToLowerInvariant();
 
-        return (lower.Contains("market") || lower.Contains("nifty") || lower.Contains("sensex"))
+        var isMatch = (lower.Contains("market") || lower.Contains("nifty") || lower.Contains("sensex"))
             && (lower.Contains("crash") || lower.Contains("down") || lower.Contains("fall") ||
                 lower.Contains("drop") || lower.Contains("today") || lower.Contains("now") ||
                 lower.Contains("why"));
+
+        _logger.LogInformation("MarketAux live query detection. Query: {Query}. IsMatch: {IsMatch}", query, isMatch);
+        return isMatch;
     }
 
     public async Task<List<MarketAuxArticle>> GetLatestMarketNewsAsync(string query)
@@ -49,6 +52,7 @@ public class MarketAuxService : IMarketNewsService
         try
         {
             var publishedAfter = DateTime.UtcNow.AddDays(-2).ToString("yyyy-MM-ddTHH:mm");
+            var searchTerms = BuildSearchTerms(query);
             var parameters = new Dictionary<string, string?>
             {
                 ["api_token"] = _apiToken,
@@ -57,7 +61,7 @@ public class MarketAuxService : IMarketNewsService
                 ["must_have_entities"] = "true",
                 ["filter_entities"] = "true",
                 ["published_after"] = publishedAfter,
-                ["search"] = BuildSearchTerms(query)
+                ["search"] = searchTerms
             };
 
             var countries = _configuration["MarketAux:Countries"];
@@ -67,13 +71,21 @@ public class MarketAuxService : IMarketNewsService
             }
 
             var url = QueryHelpers.AddQueryString("/v1/news/all", parameters!);
-            _logger.LogInformation("Fetching live market news from MarketAux for query: {Query}", query);
+            _logger.LogInformation(
+                "Fetching live market news from MarketAux. Query: {Query}. SearchTerms: {SearchTerms}. PublishedAfterUtc: {PublishedAfter}. Countries: {Countries}",
+                query,
+                searchTerms,
+                publishedAfter,
+                countries ?? "none");
 
             var response = await _httpClient.GetFromJsonAsync<MarketAuxResponse>(url);
-            return response?.Data?
+            var articles = response?.Data?
                 .Where(a => !string.IsNullOrWhiteSpace(a.Title))
                 .Take(5)
                 .ToList() ?? new List<MarketAuxArticle>();
+
+            _logger.LogInformation("MarketAux returned {ArticleCount} articles for query: {Query}", articles.Count, query);
+            return articles;
         }
         catch (Exception ex)
         {

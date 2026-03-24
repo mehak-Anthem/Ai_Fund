@@ -126,9 +126,14 @@ public class AiOrchestratorService : IAiOrchestratorService
                 return CreateResponse(CleanResponse(currencyAnswer), "Live-Currency", 1.0, "CURRENCY");
             }
 
-            if (_marketNewsService.IsLiveMarketQuery(originalQuery))
+            var isLiveMarketQuery = _marketNewsService.IsLiveMarketQuery(originalQuery);
+            _logger.LogInformation("Live market path check for query: {Query}. IsLiveMarketQuery: {IsLiveMarketQuery}", originalQuery, isLiveMarketQuery);
+
+            if (isLiveMarketQuery)
             {
                 var liveArticles = await _marketNewsService.GetLatestMarketNewsAsync(originalQuery);
+                _logger.LogInformation("Live market news article count for query: {Query}. Count: {Count}", originalQuery, liveArticles.Count);
+
                 if (liveArticles.Any())
                 {
                     var liveContext = _marketNewsService.BuildNewsContext(liveArticles, originalQuery);
@@ -137,8 +142,11 @@ public class AiOrchestratorService : IAiOrchestratorService
                     marketAnswer = CleanResponse(marketAnswer);
                     marketAnswer = _personalityService.ApplyPersonality(marketAnswer);
                     _contextManager.SaveConversationTurn(userId, originalQuery, marketAnswer, "Market News", "MARKET_LIVE", ExtractConversationEntities(originalQuery, marketAnswer));
+                    _logger.LogInformation("Returning live market news response for query: {Query}", originalQuery);
                     return CreateResponse(marketAnswer, "Live-Market-News", 1.0, "MARKET_LIVE");
                 }
+
+                _logger.LogWarning("Live market query detected but no articles were returned. Falling back to RAG. Query: {Query}", originalQuery);
             }
 
             // 3. Resolve follow-up queries with context
