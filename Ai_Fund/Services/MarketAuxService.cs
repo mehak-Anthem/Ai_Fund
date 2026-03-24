@@ -53,39 +53,33 @@ public class MarketAuxService : IMarketNewsService
         {
             var publishedAfter = DateTime.UtcNow.AddDays(-2).ToString("yyyy-MM-ddTHH:mm");
             var searchTerms = BuildSearchTerms(query);
-            var parameters = new Dictionary<string, string?>
+            var countries = _configuration["MarketAux:Countries"];
+            var attempts = new List<(string SearchTerms, bool MustHaveEntities, bool FilterEntities, string? Countries)>
             {
-                ["api_token"] = _apiToken,
-                ["language"] = _configuration["MarketAux:Language"] ?? "en",
-                ["limit"] = _configuration["MarketAux:Limit"] ?? "5",
-                ["must_have_entities"] = "true",
-                ["filter_entities"] = "true",
-                ["published_after"] = publishedAfter,
-                ["search"] = searchTerms
+                (searchTerms, true, true, countries),
+                (searchTerms, false, false, countries),
+                (searchTerms, false, false, null),
+                (BuildFallbackSearchTerms(query), false, false, null)
             };
 
-            var countries = _configuration["MarketAux:Countries"];
-            if (!string.IsNullOrWhiteSpace(countries))
+            foreach (var attempt in attempts)
             {
-                parameters["countries"] = countries;
+                var articles = await FetchArticlesAsync(
+                    query,
+                    attempt.SearchTerms,
+                    publishedAfter,
+                    attempt.MustHaveEntities,
+                    attempt.FilterEntities,
+                    attempt.Countries);
+
+                if (articles.Any())
+                {
+                    return articles;
+                }
             }
 
-            var url = QueryHelpers.AddQueryString("/v1/news/all", parameters!);
-            _logger.LogInformation(
-                "Fetching live market news from MarketAux. Query: {Query}. SearchTerms: {SearchTerms}. PublishedAfterUtc: {PublishedAfter}. Countries: {Countries}",
-                query,
-                searchTerms,
-                publishedAfter,
-                countries ?? "none");
-
-            var response = await _httpClient.GetFromJsonAsync<MarketAuxResponse>(url);
-            var articles = response?.Data?
-                .Where(a => !string.IsNullOrWhiteSpace(a.Title))
-                .Take(5)
-                .ToList() ?? new List<MarketAuxArticle>();
-
-            _logger.LogInformation("MarketAux returned {ArticleCount} articles for query: {Query}", articles.Count, query);
-            return articles;
+            _logger.LogWarning("MarketAux returned no articles after all fallback attempts for query: {Query}", query);
+            return new List<MarketAuxArticle>();
         }
         catch (Exception ex)
         {
@@ -127,9 +121,81 @@ public class MarketAuxService : IMarketNewsService
 
         if (lower.Contains("nifty") || lower.Contains("sensex") || lower.Contains("india") || lower.Contains("indian"))
         {
-            return "\"Nifty\" OR \"Sensex\" OR \"Indian stock market\" OR \"India markets\"";
+            return "\"Nifty\" \"Sensex\" \"Indian stock market\"";
         }
 
-        return "\"stock market\" OR markets OR equities";
+        return "\"stock market\" equities";
+    }
+
+    private static string BuildFallbackSearchTerms(string query)
+    {
+        var lower = query.ToLowerInvariant();
+
+        if (lower.Contains("nifty") || lower.Contains("sensex") || lower.Contains("india") || lower.Contains("indian"))
+        {
+            return "Nifty Sensex India market";
+        }
+
+        return "stock market today";
+    }
+
+    private async Task<List<MarketAuxArticle>> FetchArticlesAsync(
+        string query,
+        string searchTerms,
+        string publishedAfter,
+        bool mustHaveEntities,
+        bool filterEntities,
+        string? countries)
+    {
+        var parameters = new Dictionary<string, string?>
+        {
+            ["api_token"] = _apiToken,
+            ["language"] = _configuration["MarketAux:Language"] ?? "en",
+            ["limit"] = _configuration["MarketAux:Limit"] ?? "5",
+            ["published_after"] = publishedAfter,
+            ["search"] = searchTerms
+        };
+
+        if (mustHaveEntities)
+        {
+            parameters["must_have_entities"] = "true";
+        }
+
+        if (filterEntities)
+        {
+            parameters["filter_entities"] = "true";
+        }
+
+        if (!string.IsNullOrWhiteSpace(countries))
+        {
+            parameters["countries"] = countries;
+        }
+
+        var url = QueryHelpers.AddQueryString("/v1/news/all", parameters!);
+        _logger.LogInformation(
+            "Fetching live market news from MarketAux. Query: {Query}. SearchTerms: {SearchTerms}. PublishedAfterUtc: {PublishedAfter}. Countries: {Countries}. MustHaveEntities: {MustHaveEntities}. FilterEntities: {FilterEntities}",
+            query,
+            searchTerms,
+            publishedAfter,
+            countries ?? "none",
+            mustHaveEntities,
+            filterEntities);
+
+        var response = await _httpClient.GetFromJsonAsync<MarketAuxResponse>(url);
+        var articles = response?.Data?
+            .Where(a => !string.IsNullOrWhiteSpace(a.Title))
+            .Take(5)
+            .ToList() ?? new List<MarketAuxArticle>();
+
+        _logger.LogInformation(
+            "MarketAux returned {ArticleCount} articles for query: {Query}. SearchTerms: {SearchTerms}. Countries: {Countries}. MustHaveEntities: {MustHaveEntities}. FilterEntities: {FilterEntities}",
+            articles.Count,
+            query,
+            searchTerms,
+            countries ?? "none",
+            mustHaveEntities,
+            filterEntities);
+
+        return articles;
     }
 }
