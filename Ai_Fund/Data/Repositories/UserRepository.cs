@@ -21,7 +21,8 @@ public class UserRepository : IUserRepository
         {
             using (SqlConnection conn = new SqlConnection(_connectionString))
             {
-                var query = "SELECT UserId, Username, PasswordHash, Email, CreatedAt FROM Users WHERE Username = @Username";
+                var query = "SELECT UserId, Username, PasswordHash, Email, Role, CreatedAt FROM Users WHERE Username = @Username";
+
                 using (SqlCommand cmd = new SqlCommand(query, conn))
                 {
                     cmd.Parameters.AddWithValue("@Username", username);
@@ -36,7 +37,9 @@ public class UserRepository : IUserRepository
                                 Username = reader.GetString(1),
                                 PasswordHash = reader.GetString(2),
                                 Email = reader.IsDBNull(3) ? string.Empty : reader.GetString(3),
-                                CreatedAt = reader.GetDateTime(4)
+                                Role = reader.GetString(4),
+                                CreatedAt = reader.GetDateTime(5)
+
                             };
                         }
                     }
@@ -60,7 +63,8 @@ public class UserRepository : IUserRepository
     {
         using (SqlConnection conn = new SqlConnection(_connectionString))
         {
-            var query = "SELECT UserId, Username, PasswordHash, Email, CreatedAt FROM Users WHERE UserId = @UserId";
+            var query = "SELECT UserId, Username, PasswordHash, Email, Role, CreatedAt FROM Users WHERE UserId = @UserId";
+
             using (SqlCommand cmd = new SqlCommand(query, conn))
             {
                 cmd.Parameters.AddWithValue("@UserId", id);
@@ -75,7 +79,9 @@ public class UserRepository : IUserRepository
                             Username = reader.GetString(1),
                             PasswordHash = reader.GetString(2),
                             Email = reader.IsDBNull(3) ? string.Empty : reader.GetString(3),
-                            CreatedAt = reader.GetDateTime(4)
+                            Role = reader.GetString(4),
+                            CreatedAt = reader.GetDateTime(5)
+
                         };
                     }
                 }
@@ -90,13 +96,16 @@ public class UserRepository : IUserRepository
         {
             using (SqlConnection conn = new SqlConnection(_connectionString))
             {
-                var query = "INSERT INTO Users (Username, PasswordHash, Email, CreatedAt) VALUES (@Username, @PasswordHash, @Email, @CreatedAt); SELECT SCOPE_IDENTITY();";
+                var query = "INSERT INTO Users (Username, PasswordHash, Email, Role, CreatedAt) VALUES (@Username, @PasswordHash, @Email, @Role, @CreatedAt); SELECT SCOPE_IDENTITY();";
+
                 using (SqlCommand cmd = new SqlCommand(query, conn))
                 {
                     cmd.Parameters.AddWithValue("@Username", user.Username);
                     cmd.Parameters.AddWithValue("@PasswordHash", user.PasswordHash);
                     cmd.Parameters.AddWithValue("@Email", (object?)user.Email ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("@Role", user.Role);
                     cmd.Parameters.AddWithValue("@CreatedAt", user.CreatedAt);
+
                     await conn.OpenAsync();
                     var insertedId = await cmd.ExecuteScalarAsync();
                     if (insertedId != null && insertedId != DBNull.Value)

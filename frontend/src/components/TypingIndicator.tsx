@@ -1,12 +1,26 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 
 const TypingIndicator: React.FC = () => {
   return (
-    <div className="flex mb-6 animate-fadeIn">
-      <div className="flex gap-1.5 px-5 py-4 glass-panel rounded-2xl rounded-bl-sm">
-        <div className="w-2 h-2 bg-violet-500 rounded-full animate-bounce shadow-[0_0_8px_rgba(139,92,246,0.3)]" style={{ animationDelay: '0ms' }} />
-        <div className="w-2 h-2 bg-gradient-to-r from-violet-500 to-cyan-500 rounded-full animate-bounce shadow-[0_0_8px_rgba(6,182,212,0.3)]" style={{ animationDelay: '150ms' }} />
-        <div className="w-2 h-2 bg-cyan-500 rounded-full animate-bounce shadow-[0_0_8px_rgba(6,182,212,0.3)]" style={{ animationDelay: '300ms' }} />
+    <div className="flex mb-8 animate-fadeIn">
+      <div className="flex gap-1.5 px-5 py-4 bg-bg-secondary border border-border-primary rounded-[24px] rounded-tl-[4px]">
+        {[0, 1, 2].map((i) => (
+          <motion.div
+            key={i}
+            animate={{
+              y: [0, -4, 0],
+              opacity: [0.4, 1, 0.4]
+            }}
+            transition={{
+              duration: 0.8,
+              repeat: Infinity,
+              delay: i * 0.15,
+              ease: "easeInOut"
+            }}
+            className="w-1.5 h-1.5 bg-indigo-500 rounded-full"
+          />
+        ))}
       </div>
     </div>
   );

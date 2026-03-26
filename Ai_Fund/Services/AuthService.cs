@@ -46,8 +46,10 @@ public class AuthService : IAuthService
                 UserId = user.UserId,
                 Username = user.Username,
                 Email = user.Email,
+                Role = user.Role,
                 Token = GenerateJwtToken(user)
             };
+
         }
         catch (Exception ex)
         {
@@ -70,8 +72,10 @@ public class AuthService : IAuthService
                 UserId = user.UserId,
                 Username = user.Username,
                 Email = user.Email,
+                Role = user.Role,
                 Token = GenerateJwtToken(user)
             };
+
         }
         catch (Exception ex)
         {
@@ -91,7 +95,9 @@ public class AuthService : IAuthService
             {
                 new Claim(ClaimTypes.Name, user.Username),
                 new Claim(ClaimTypes.Email, user.Email),
+                new Claim(ClaimTypes.Role, user.Role),
                 new Claim("id", user.UserId.ToString())
+
             }),
             Expires = DateTime.UtcNow.AddDays(7),
             Issuer = jwtSettings["Issuer"],

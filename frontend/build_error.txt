@@ -1,0 +1,63 @@
+﻿
+> fundai-frontend@1.0.0 build
+> tsc && vite build
+
+[36mvite v5.4.21 [32mbuilding for production...[36m[39m
+transforming...
+[32mΓ£ô[39m 24 modules transformed.
+node.exe : [31mx[39m Build failed 
+in 1.02s
+At C:\Program 
+Files\nodejs\npm.ps1:29 char:3
++   & $NODE_EXE $NPM_CLI_JS $args
++   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpe 
+   cified: ([31mx[39m Build faile  
+  d in 1.02s:String) [], RemoteExc   
+ eption
+    + FullyQualifiedErrorId : Native 
+   CommandError
+ 
+[31merror during build:
+[31m[vite:css] [postcss] D:/AI_Fund/
+Ai_Fund/frontend/src/index.css:31:1: 
+The `border-border-primary` class 
+does not exist. If 
+`border-border-primary` is a custom 
+class, make sure it is defined 
+within a `@layer` directive.[31m
+file: [36mD:/AI_Fund/Ai_Fund/fronten
+d/src/index.css:31:0[31m
+    at Input.error (D:\AI_Fund\Ai_Fun
+d\frontend\node_modules\postcss\lib\i
+nput.js:135:16)
+    at AtRule.error (D:\AI_Fund\Ai_Fu
+nd\frontend\node_modules\postcss\lib\
+node.js:146:32)
+    at processApply (D:\AI_Fund\Ai_Fu
+nd\frontend\node_modules\tailwindcss\
+lib\lib\expandApplyAtRules.js:380:29)
+    at D:\AI_Fund\Ai_Fund\frontend\no
+de_modules\tailwindcss\lib\lib\expand
+ApplyAtRules.js:551:9
+    at D:\AI_Fund\Ai_Fund\frontend\no
+de_modules\tailwindcss\lib\processTai
+lwindFeatures.js:55:50
+    at async plugins (D:\AI_Fund\Ai_F
+und\frontend\node_modules\tailwindcss
+\lib\plugin.js:38:17)
+    at async LazyResult.runAsync (D:\
+AI_Fund\Ai_Fund\frontend\node_modules
+\postcss\lib\lazy-result.js:293:11)
+    at async compileCSS (file:///D:/A
+I_Fund/Ai_Fund/frontend/node_modules/
+vite/dist/node/chunks/dep-BK3b2jBa.js
+:36898:21)
+    at async Object.transform (file:/
+//D:/AI_Fund/Ai_Fund/frontend/node_mo
+dules/vite/dist/node/chunks/dep-BK3b2
+jBa.js:36171:11)
+    at async transform (file:///D:/AI
+_Fund/Ai_Fund/frontend/node_modules/r
+ollup/dist/es/shared/node-entry.js:21
+269:16)[39m

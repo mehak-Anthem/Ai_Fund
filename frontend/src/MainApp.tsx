@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import Header from './components/Header';
+import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import ChatMessage from './components/ChatMessage';
 import TypingIndicator from './components/TypingIndicator';
@@ -7,15 +7,16 @@ import EmptyState from './components/EmptyState';
 import ChatInput from './components/ChatInput';
 import { Message, ChatResponse } from './types';
 import api from './services/api';
-
+import { useAuth } from './context/AuthContext';
 
 function MainApp() {
+  const { user } = useAuth();
   const [currentView, setCurrentView] = useState<'chat' | 'dashboard'>('chat');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const chatAreaRef = useRef<HTMLDivElement>(null);
 
-
+  const isAdmin = user?.role === 'Admin';
 
   useEffect(() => {
     scrollToBottom();
@@ -56,7 +57,7 @@ function MainApp() {
       console.error('Error:', error);
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        content: 'Sorry, I encountered an error. Please try again.',
+        content: 'I encountered an error. Please try again.',
         isUser: false,
         timestamp: new Date(),
       };
@@ -78,42 +79,54 @@ function MainApp() {
   };
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-whiteboard relative">
-      <Header currentView={currentView} onViewChange={setCurrentView} />
+    <Layout
+      currentView={currentView}
+      onViewChange={setCurrentView}
+      isAdmin={isAdmin}
+      username={user?.username || 'Guest'}
+    >
+      <div className="h-full flex flex-col relative">
+        {currentView === 'dashboard' && isAdmin ? (
+          <div className="flex-1 overflow-y-auto p-8 scrollbar-hide">
+             <Dashboard />
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div
+              ref={chatAreaRef}
+              className="flex-1 overflow-y-auto px-4 md:px-12 py-8 scrollbar-hide"
+            >
+              <div className="max-w-3xl mx-auto space-y-8 pb-32">
+                {messages.length === 0 ? (
+                  <EmptyState />
+                ) : (
+                  <>
+                    {messages.map((message) => (
+                      <ChatMessage
+                        key={message.id}
+                        message={message}
+                        onCopy={handleCopy}
+                        onRegenerate={handleRegenerate}
+                      />
+                    ))}
+                    {isTyping && <TypingIndicator />}
+                  </>
+                )}
+              </div>
+            </div>
 
-      {currentView === 'dashboard' ? (
-        <Dashboard />
-      ) : (
-        <div className="flex-1 flex flex-col overflow-hidden z-10">
-          <div
-            ref={chatAreaRef}
-            className="flex-1 overflow-y-auto px-4 md:px-8 py-8 scrollbar-hide"
-          >
-            <div className="max-w-3xl mx-auto space-y-6 pb-20">
-              {messages.length === 0 ? (
-                <EmptyState />
-              ) : (
-                <>
-                  {messages.map((message) => (
-                    <ChatMessage
-                      key={message.id}
-                      message={message}
-                      onCopy={handleCopy}
-                      onRegenerate={handleRegenerate}
-                    />
-                  ))}
-                  {isTyping && <TypingIndicator />}
-                </>
-              )}
+            <div className="absolute bottom-0 left-0 right-0 p-8 z-20 pointer-events-none">
+              <div className="max-w-3xl mx-auto pointer-events-auto">
+                <ChatInput onSend={handleSendMessage} disabled={isTyping} />
+                <p className="text-[10px] text-center text-text-muted mt-4 font-medium opacity-60">
+                  FundAI can provide helpful insights, but always verify critical financial information.
+                </p>
+              </div>
             </div>
           </div>
-
-          <div className="z-20 p-4 bg-gradient-to-t from-[#f8fafc] via-[#f8fafc] to-transparent pb-6">
-            <ChatInput onSend={handleSendMessage} disabled={isTyping} />
-          </div>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </Layout>
   );
 }
 
