@@ -25,6 +25,7 @@ public class AiOrchestratorService : IAiOrchestratorService
     private readonly IMfApiService _mfApiService;
     private readonly ICurrencyService _currencyService;
     private readonly IMarketNewsService _marketNewsService;
+    private readonly IMarketService _marketService;
 
     public AiOrchestratorService(
         IMutualFundRepository repository,
@@ -43,7 +44,8 @@ public class AiOrchestratorService : IAiOrchestratorService
         IQdrantService qdrantService,
         IMfApiService mfApiService,
         ICurrencyService currencyService,
-        IMarketNewsService marketNewsService)
+        IMarketNewsService marketNewsService,
+        IMarketService marketService)
     {
         _repository = repository;
         _embeddingService = embeddingService;
@@ -62,7 +64,9 @@ public class AiOrchestratorService : IAiOrchestratorService
         _mfApiService = mfApiService;
         _currencyService = currencyService;
         _marketNewsService = marketNewsService;
+        _marketService = marketService;
     }
+
 
     public async Task<ChatResponse> ProcessQueryAsync(string query, string userId)
     {
@@ -73,6 +77,12 @@ public class AiOrchestratorService : IAiOrchestratorService
             {
                 return CreateResponse("Please provide a valid query", "System", 0, "INVALID");
             }
+
+            // 1.5 Fetch LIVE MARKET Context (Nifty/Sensex) to align AI with Dashboard
+            var marketOverview = await _marketService.GetMarketOverviewAsync();
+            var marketJson = JsonSerializer.Serialize(marketOverview);
+            _logger.LogInformation("Live Market Data injected into AI context: {MarketData}", marketJson);
+
 
             // 2. Normalize input (fix typos)
             query = InputNormalizer.NormalizeInput(query);
@@ -296,7 +306,10 @@ public class AiOrchestratorService : IAiOrchestratorService
             }
 
             // 11. Final RAG+LLM Pipeline
-            var context = BuildContext(topMatches) + liveDataContext;
+            var liveMarketStatus = await _marketService.GetMarketOverviewAsync();
+            var liveMarketContext = $"\n\nCURRENT MARKET STATUS (LIVE INDEX):\n{JsonSerializer.Serialize(liveMarketStatus)}";
+            
+            var context = BuildContext(topMatches) + liveDataContext + liveMarketContext;
             context = BuildConversationAwareContext(context, richContext, isFollowUp);
 
             var aiResponse = await _llmService.AskLLMAsync(
@@ -306,6 +319,7 @@ public class AiOrchestratorService : IAiOrchestratorService
                 isPersonalQuery || needsStructuredEarly,
                 isFollowUp,
                 existingContext?.LastAnswer);
+
             aiResponse = CleanResponse(aiResponse);
             aiResponse = _personalityService.ApplyPersonality(aiResponse);
 

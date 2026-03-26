@@ -96,9 +96,10 @@ const InsightPanel: React.FC = () => {
 
   useEffect(() => {
     fetchMarketData();
-    const interval = setInterval(() => fetchMarketData(), 60000); // Auto-refresh every minute
+    const interval = setInterval(() => fetchMarketData(), 10000); // Super-live: 10 second refresh
     return () => clearInterval(interval);
   }, [fetchMarketData]);
+
 
   return (
     <aside className="hidden lg:flex flex-col w-96 h-full border-l border-border-primary bg-bg-secondary/20 backdrop-blur-3xl p-6 overflow-y-auto scrollbar-hide">

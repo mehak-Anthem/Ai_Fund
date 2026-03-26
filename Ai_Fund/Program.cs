@@ -36,6 +36,8 @@ builder.Services.AddScoped<ISmartGuidanceService, SmartGuidanceService>();
 builder.Services.AddHttpClient<IMfApiService, MfApiService>();
 builder.Services.AddHttpClient<ICurrencyService, CurrencyService>();
 builder.Services.AddHttpClient<IMarketNewsService, MarketAuxService>();
+builder.Services.AddScoped<IMarketService, MarketService>();
+
 
 // Configure JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("Jwt");
