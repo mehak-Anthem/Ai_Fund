@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace Ai_Fund.Models;
@@ -92,4 +93,41 @@ public class MarketDataDetails
     [JsonPropertyName("percent_change")]
     public double PercentChange { get; set; }
 }
+public class YahooSearchResponse
+{
+    [JsonPropertyName("news")]
+    public List<YahooSearchNews> News { get; set; } = new();
+}
 
+public class YahooSearchNews
+{
+    [JsonPropertyName("uuid")]
+    public string Uuid { get; set; } = string.Empty;
+
+    [JsonPropertyName("title")]
+    public string Title { get; set; } = string.Empty;
+
+    [JsonPropertyName("publisher")]
+    public string Publisher { get; set; } = string.Empty;
+
+    [JsonPropertyName("link")]
+    public string Link { get; set; } = string.Empty;
+
+    [JsonPropertyName("providerPublishTime")]
+    public long ProviderPublishTime { get; set; }
+
+    [JsonPropertyName("thumbnail")]
+    public YahooThumbnail? Thumbnail { get; set; }
+}
+
+public class YahooThumbnail
+{
+    [JsonPropertyName("resolutions")]
+    public List<YahooResolution> Resolutions { get; set; } = new();
+}
+
+public class YahooResolution
+{
+    [JsonPropertyName("url")]
+    public string Url { get; set; } = string.Empty;
+}

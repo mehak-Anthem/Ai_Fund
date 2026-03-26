@@ -1,3 +1,7 @@
+using System;
+using System.Linq;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using System.Net.Http.Json;
 using Ai_Fund.Models;
 using System.Collections.Concurrent;
@@ -161,7 +165,48 @@ public class MarketService : IMarketService
 
         return cached.Data != null ? (List<double?>)cached.Data : new List<double?>();
     }
+
+    public async Task<object> GetYahooNewsAsync(string query)
+    {
+        var cacheKey = $"news_{query}";
+        if (_cache.TryGetValue(cacheKey, out var cached) && (DateTime.UtcNow - cached.Timestamp) < TimeSpan.FromMinutes(10))
+        {
+            return cached.Data;
+        }
+
+        try
+        {
+            using var client = new HttpClient();
+            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36");
+            
+            var url = $"https://query2.finance.yahoo.com/v1/finance/search?q={Uri.EscapeDataString(query)}&newsCount=4";
+            var result = await client.GetFromJsonAsync<YahooSearchResponse>(url);
+
+            if (result?.News != null)
+            {
+                var articles = result.News.Select(n => new {
+                    uuid = n.Uuid,
+                    title = n.Title,
+                    description = "", // Yahoo search news often doesn't have deep snippets in this response
+                    url = n.Link,
+                    source = n.Publisher,
+                    published_at = DateTimeOffset.FromUnixTimeSeconds(n.ProviderPublishTime).ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                    image_url = n.Thumbnail?.Resolutions?.FirstOrDefault()?.Url ?? ""
+                }).ToList();
+
+                _cache[cacheKey] = (articles, DateTime.UtcNow);
+                return articles;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error fetching Yahoo News for {Query}", query);
+        }
+
+        return new List<object>();
+    }
 }
+
 
 
 

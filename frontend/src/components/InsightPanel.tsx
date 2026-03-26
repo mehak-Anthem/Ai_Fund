@@ -103,6 +103,26 @@ const InsightCard: React.FC<{
     fetchChart();
   }, [symbol, range]);
 
+  // Derive dynamic values for historical ranges
+  let displayValue = value;
+  let displayChange = change;
+  let displayPercent = percent;
+  let displayColor = color;
+  let rangeLabel = "today";
+
+  if (range !== '1d' && chartData.length >= 2) {
+    const first = chartData[0];
+    const last = chartData[chartData.length - 1];
+    const diff = last - first;
+    const diffPercent = (diff / first) * 100;
+    
+    displayValue = last.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+    displayChange = `${diff >= 0 ? '+' : ''}${diff.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+    displayPercent = `${diffPercent.toFixed(2)}%`;
+    displayColor = diff >= 0 ? 'green' : 'rose';
+    rangeLabel = range === '5d' ? 'past 5 days' : 'past month';
+  }
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 10 }}
@@ -136,20 +156,19 @@ const InsightCard: React.FC<{
         ) : (
           <>
             <motion.div 
-              key={value}
               initial={{ opacity: 0.5 }}
               animate={{ opacity: 1 }}
               className="text-3xl font-black text-text-primary tracking-tighter mb-1"
             >
-              {value}
+              {displayValue}
             </motion.div>
             
-            <div className={`flex items-center gap-2 text-xs font-bold ${color === 'green' ? 'text-emerald-500' : 'text-rose-500'}`}>
-              <span>{change} ({percent})</span>
-              <span className="text-[10px] opacity-70 font-medium text-text-muted">today</span>
+            <div className={`flex items-center gap-2 text-xs font-bold ${displayColor === 'green' ? 'text-emerald-500' : 'text-rose-500'}`}>
+              <span>{displayChange} ({displayPercent})</span>
+              <span className="text-[10px] opacity-70 font-medium text-text-muted">{rangeLabel}</span>
             </div>
 
-            <Sparkline data={chartData} color={color} loading={chartLoading} />
+            <Sparkline data={chartData} color={displayColor} loading={chartLoading} />
 
             <div className="mt-4 pt-3 border-t border-border-primary/50 text-[10px] text-text-muted font-medium flex items-center justify-between">
               <span className="opacity-60">{lastUpdate}</span>
@@ -161,6 +180,7 @@ const InsightCard: React.FC<{
     </motion.div>
   );
 };
+
 
 
 interface NewsArticle {

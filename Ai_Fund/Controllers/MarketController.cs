@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using System.Threading.Tasks;
 using Ai_Fund.Services;
 using Ai_Fund.Models;
 using Microsoft.AspNetCore.Authorization;
@@ -13,12 +14,10 @@ namespace Ai_Fund.Controllers;
 public class MarketController : ControllerBase
 {
     private readonly IMarketService _marketService;
-    private readonly IMarketNewsService _newsService;
 
-    public MarketController(IMarketService marketService, IMarketNewsService newsService)
+    public MarketController(IMarketService marketService)
     {
         _marketService = marketService;
-        _newsService = newsService;
     }
 
     [HttpGet("overview")]
@@ -45,10 +44,11 @@ public class MarketController : ControllerBase
     [HttpGet("news")]
     public async Task<IActionResult> GetNews()
     {
-        var news = await _newsService.GetFinancialNewsAsync();
+        var news = await _marketService.GetYahooNewsAsync("Nifty 50 News");
         return Ok(news);
     }
 }
+
 
 
 
