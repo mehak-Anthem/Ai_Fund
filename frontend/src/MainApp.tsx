@@ -7,7 +7,7 @@ import EmptyState from './components/EmptyState';
 import ChatInput from './components/ChatInput';
 import { Message, ChatResponse } from './types';
 import api from './services/api';
-import { useAuth } from './context/AuthContext';
+
 
 function MainApp() {
   const [currentView, setCurrentView] = useState<'chat' | 'dashboard'>('chat');
