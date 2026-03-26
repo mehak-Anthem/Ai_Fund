@@ -90,7 +90,8 @@ public class AuthService : IAuthService
             {
                 new Claim(ClaimTypes.Name, user.Username),
                 new Claim(ClaimTypes.Email, user.Email),
-                new Claim("id", user.Id.ToString())
+                new Claim("id", user.UserId.ToString())
+
             }),
             Expires = DateTime.UtcNow.AddDays(7),
             Issuer = jwtSettings["Issuer"],

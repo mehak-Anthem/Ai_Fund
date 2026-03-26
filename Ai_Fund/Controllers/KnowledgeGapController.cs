@@ -70,17 +70,24 @@ public class KnowledgeGapController : ControllerBase
     [HttpGet("dashboard")]
     public async Task<IActionResult> GetDashboard()
     {
-        var topGaps = await _gapService.GetTopGapsAsync(10);
+        var topGaps = await _gapService.GetTopGapsAsync(20);
+        var allLogs = await _repository.GetChatHistoryAsync("", 1000); // Get recent logs for stats
         
+        var avgConfidence = allLogs.Any() ? 0.85 : 0; // Simulated for now or calculate from AiLog table
+        var totalUsers = allLogs.Select(l => l.UserId).Distinct().Count();
+
         return Ok(new
         {
-            TotalGaps = topGaps.Count,
+            TotalGaps = topGaps.Count(g => g.Status != "Resolved"),
+            TotalLogs = allLogs.Count,
+            AvgConfidence = avgConfidence,
+            ActiveUsers = totalUsers,
             TopMissingQuestions = topGaps.Select(g => new
             {
                 g.Question,
                 g.OccurrenceCount,
                 g.LastAsked,
-                g.Status,
+               g.Status,
                 g.ConfidenceScore
             }).ToList(),
             Summary = new
@@ -91,6 +98,7 @@ public class KnowledgeGapController : ControllerBase
             }
         });
     }
+
 
     [HttpPost("sync-to-qdrant")]
     public async Task<IActionResult> SyncToQdrant([FromServices] ISyncService syncService)

@@ -40,11 +40,12 @@ const Dashboard: React.FC = () => {
       const data = await response.json();
 
       setStats({
-        totalQueries: data.totalGaps || 0,
-        knowledgeGaps: data.summary?.newGaps || 0,
-        avgConfidence: 87,
-        activeUsers: 156,
+        totalQueries: data.totalLogs || 0,
+        knowledgeGaps: data.totalGaps || 0,
+        avgConfidence: Math.round(data.avgConfidence * 100) || 0,
+        activeUsers: data.activeUsers || 0,
       });
+
 
       setGaps(data.topMissingQuestions || []);
       setLoading(false);

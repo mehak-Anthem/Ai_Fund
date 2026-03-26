@@ -310,14 +310,35 @@ public class AiOrchestratorService : IAiOrchestratorService
             if (guarded != null) return guarded;
 
             var source = string.IsNullOrEmpty(liveDataContext) ? "RAG+LLM" : "Live+RAG+LLM";
-            var finalResponse = CreateResponse(aiResponse, source, ScaleConfidence(topMatches.Count > 0 ? topMatches[0].Score : 0.9), intent);
+            var topScore = topMatches.Count > 0 ? topMatches[0].Score : 0.9;
+            var finalResponse = CreateResponse(aiResponse, source, ScaleConfidence(topScore), intent);
+
+            // Log as a gap if confidence is low (below 0.6) and no live data was used
+            if (topScore < 0.6 && string.IsNullOrEmpty(liveDataContext))
+            {
+                await _gapService.LogGapAsync(originalQuery, intent, topScore);
+            }
 
             var conversationEntities = ExtractConversationEntities(originalQuery, aiResponse);
+
             _contextManager.SaveConversationTurn(userId, originalQuery, aiResponse, topic, intent, conversationEntities);
             
             // Save and Cache
+            var aiLog = new Models.AiLog
+            {
+                UserId = userId,
+                Query = originalQuery,
+                Response = aiResponse,
+                ConfidenceScore = finalResponse.Confidence,
+                Intent = intent,
+                Source = source,
+                CreatedDate = DateTime.UtcNow
+            };
+
             await _repository.SaveChatHistoryAsync(new Models.ChatHistory { UserId = userId, Role = "Assistant", Message = aiResponse, CreatedDate = DateTime.UtcNow });
+            await _repository.SaveAiLogAsync(aiLog);
             CacheExtensions.Set(_cache, cacheKey, finalResponse, new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(30) });
+
 
             return finalResponse;
         }

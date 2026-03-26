@@ -31,7 +31,8 @@ CREATE INDEX IX_AiLog_UserId ON AiLog(UserId);
 CREATE INDEX IX_AiLog_CreatedDate ON AiLog(CreatedDate);
 -- Create Users table for authentication
 CREATE TABLE Users (
-    Id INT PRIMARY KEY IDENTITY(1,1),
+    UserId INT PRIMARY KEY IDENTITY(1,1),
+
     Username NVARCHAR(100) UNIQUE NOT NULL,
     PasswordHash NVARCHAR(MAX) NOT NULL,
     Email NVARCHAR(255),

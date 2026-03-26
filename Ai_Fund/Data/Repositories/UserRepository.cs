@@ -21,7 +21,7 @@ public class UserRepository : IUserRepository
         {
             using (SqlConnection conn = new SqlConnection(_connectionString))
             {
-                var query = "SELECT Id, Username, PasswordHash, Email, CreatedAt FROM Users WHERE Username = @Username";
+                var query = "SELECT UserId, Username, PasswordHash, Email, CreatedAt FROM Users WHERE Username = @Username";
                 using (SqlCommand cmd = new SqlCommand(query, conn))
                 {
                     cmd.Parameters.AddWithValue("@Username", username);
@@ -32,7 +32,7 @@ public class UserRepository : IUserRepository
                         {
                             return new User
                             {
-                                Id = reader.GetInt32(0),
+                                UserId = reader.GetInt32(0),
                                 Username = reader.GetString(1),
                                 PasswordHash = reader.GetString(2),
                                 Email = reader.IsDBNull(3) ? string.Empty : reader.GetString(3),
@@ -60,10 +60,10 @@ public class UserRepository : IUserRepository
     {
         using (SqlConnection conn = new SqlConnection(_connectionString))
         {
-            var query = "SELECT Id, Username, PasswordHash, Email, CreatedAt FROM Users WHERE Id = @Id";
+            var query = "SELECT UserId, Username, PasswordHash, Email, CreatedAt FROM Users WHERE UserId = @UserId";
             using (SqlCommand cmd = new SqlCommand(query, conn))
             {
-                cmd.Parameters.AddWithValue("@Id", id);
+                cmd.Parameters.AddWithValue("@UserId", id);
                 await conn.OpenAsync();
                 using (var reader = await cmd.ExecuteReaderAsync())
                 {
@@ -71,7 +71,7 @@ public class UserRepository : IUserRepository
                     {
                         return new User
                         {
-                            Id = reader.GetInt32(0),
+                            UserId = reader.GetInt32(0),
                             Username = reader.GetString(1),
                             PasswordHash = reader.GetString(2),
                             Email = reader.IsDBNull(3) ? string.Empty : reader.GetString(3),
@@ -101,7 +101,7 @@ public class UserRepository : IUserRepository
                     var insertedId = await cmd.ExecuteScalarAsync();
                     if (insertedId != null && insertedId != DBNull.Value)
                     {
-                        user.Id = Convert.ToInt32(insertedId);
+                        user.UserId = Convert.ToInt32(insertedId);
                     }
                 }
 
