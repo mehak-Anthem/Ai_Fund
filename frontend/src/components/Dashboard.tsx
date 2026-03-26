@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { API_BASE } from '../services/api';
+import api, { API_BASE } from '../services/api';
 
 
 interface DashboardStats {
@@ -36,8 +36,9 @@ const Dashboard: React.FC = () => {
 
   const loadDashboardData = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/KnowledgeGap/dashboard`);
-      const data = await response.json();
+      const response = await api.get('/KnowledgeGap/dashboard');
+      const data = response.data;
+
 
       setStats({
         totalQueries: data.totalLogs || 0,
@@ -57,10 +58,9 @@ const Dashboard: React.FC = () => {
 
   const syncQdrant = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/KnowledgeGap/sync-to-qdrant`, {
-        method: 'POST',
-      });
-      if (response.ok) {
+      const response = await api.post('/KnowledgeGap/sync-to-qdrant');
+      if (response.status === 200) {
+
         alert('✅ Qdrant synced successfully!');
         loadDashboardData();
       }
