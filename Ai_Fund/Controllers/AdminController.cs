@@ -81,6 +81,8 @@ public class AdminController : ControllerBase
     [HttpGet("analytics")]
     public async Task<IActionResult> GetAnalytics([FromQuery] string? userId = null)
     {
+        await Task.CompletedTask;
+
         // This is a simple implementation - in production, create a proper analytics repository
         return Ok(new
         {

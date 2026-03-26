@@ -81,6 +81,8 @@ public class AiOrchestratorService : IAiOrchestratorService
 
             // 2.5. Handle greetings EARLY (before RAG)
             var lowerQuery = query.ToLower().Trim();
+            var intent = IntentDetector.DetectIntent(lowerQuery);
+
             if (lowerQuery == "hi" || lowerQuery == "hello" || lowerQuery == "hey" ||
                 lowerQuery.Contains("how are you") || lowerQuery.Contains("how are u") || 
                 lowerQuery.Contains("how r you") || lowerQuery.Contains("how r u"))
@@ -198,7 +200,8 @@ public class AiOrchestratorService : IAiOrchestratorService
 
             // 5. Normalize query and detect intent
             query = QueryNormalizer.NormalizeQuery(query);
-            var intent = IntentDetector.DetectIntent(query);
+            intent = IntentDetector.DetectIntent(query);
+
             
             // 6. Check for personal/guidance flags
             var isPersonalQuery = _smartGuidanceService.IsPersonalQuery(originalQuery);
@@ -353,6 +356,8 @@ public class AiOrchestratorService : IAiOrchestratorService
 
     private async Task<ChatResponse?> ApplyGuardrailsDynamic(string aiResponse, string query)
     {
+        await Task.CompletedTask;
+
         if (aiResponse.Contains("guaranteed returns", StringComparison.OrdinalIgnoreCase))
         {
             return CreateResponse("Mutual funds are subject to market risk. No returns are 100% guaranteed.", "SafetyFilter", 0, "BLOCKED");
