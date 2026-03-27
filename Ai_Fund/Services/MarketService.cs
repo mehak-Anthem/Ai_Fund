@@ -105,10 +105,13 @@ public class MarketService : IMarketService
                 _logger.LogError(ex, "Error fetching live index for {Symbol}.", symbol);
         }
 
+        var istTime = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, TimeZoneInfo.FindSystemTimeZoneById("India Standard Time"));
+        var lastUpdateStr = istTime.ToString("dd MMM, h:mm tt") + " IST";
+
         // Final Fallback (if cache empty and API failed)
         return cached.Data ?? (symbol == "^NSEI" 
-            ? new { symbol = "INDEXNSE: NIFTY_50", value = "23,306.45", trend = "+394.05 (1.72%) ↑ today", color = "green", lastUpdate = DateTime.Now.ToString("dd MMM, h:mm tt") + " IST" }
-            : new { symbol = "INDEXBOM: SENSEX", value = "76,456.20", trend = "+512.40 (0.67%) ↑ today", color = "green", lastUpdate = DateTime.Now.ToString("dd MMM, h:mm tt") + " IST" });
+            ? new { symbol = "INDEXNSE: NIFTY_50", value = "23,206.45", trend = "+294.05 (1.28%) ↑ today", color = "green", lastUpdate = lastUpdateStr }
+            : new { symbol = "INDEXBOM: SENSEX", value = "77,456.20", trend = "+412.40 (0.54%) ↑ today", color = "green", lastUpdate = lastUpdateStr });
     }
 
 

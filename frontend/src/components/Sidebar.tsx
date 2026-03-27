@@ -105,13 +105,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onViewChange, isAdmin })
             </svg>
           }
         />
-
-        <motion.div 
-          whileHover={{ scale: 1.1 }}
-          className="w-10 h-10 rounded-2xl bg-slate-200 dark:bg-slate-700/50 overflow-hidden ring-2 ring-indigo-500/20 active:ring-indigo-500 transition-all cursor-pointer"
-        >
-          <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Admin" alt="Profile" className="w-full h-full object-cover" />
-        </motion.div>
       </div>
     </aside>
   );
