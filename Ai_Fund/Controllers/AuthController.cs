@@ -37,5 +37,6 @@ public class AuthController : ControllerBase
         var response = await _authService.LoginAsync(request);
         if (response == null) return Unauthorized(new { message = "Invalid username or password" });
         return Ok(response);
+
     }
 }
