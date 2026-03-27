@@ -11,12 +11,14 @@ namespace Ai_Fund.Services;
 public class MarketService : IMarketService
 {
     private readonly ILogger<MarketService> _logger;
+    private readonly ICurrencyService _currencyService;
     private static readonly ConcurrentDictionary<string, (object Data, DateTime Timestamp)> _cache = new();
     private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(30);
 
-    public MarketService(ILogger<MarketService> logger)
+    public MarketService(ILogger<MarketService> logger, ICurrencyService currencyService)
     {
         _logger = logger;
+        _currencyService = currencyService;
     }
 
 
@@ -24,15 +26,13 @@ public class MarketService : IMarketService
     {
         var nifty = await FetchLiveIndexAsync("^NSEI");
         var sensex = await FetchLiveIndexAsync("^BSESN");
-        
-        // Simulating USD/INR from common knowledge or placeholder if not in scope here
-        // Usually, currency is handled by ICurrencyService
+        var usdRate = await _currencyService.GetUsdToInrRateAsync();
         
         return new
         {
             nifty,
             sensex,
-            usdInr = new { value = "₹83.42", trend = "-0.02%", color = "rose" }
+            usdInr = new { value = $"₹{usdRate:F2}", trend = "Live", color = "indigo" }
         };
     }
 
