@@ -44,11 +44,6 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, onCopy, onRegenerate
         {!message.isUser && (
           <div className="flex flex-col gap-3 mt-3 ml-2">
             <div className="flex items-center gap-3 text-[10px] font-bold uppercase tracking-widest text-text-muted">
-              {message.source && (
-                <span className="px-2 py-0.5 bg-bg-secondary rounded-lg text-indigo-500 border border-border-primary ring-1 ring-indigo-500/10">
-                  {message.source} {message.confidence && `• ${Math.round(message.confidence * 100)}%`}
-                </span>
-              )}
               <span>{formatTime(message.timestamp)}</span>
             </div>
 
