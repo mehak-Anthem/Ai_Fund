@@ -309,4 +309,228 @@ public class MutualFundRepository : IMutualFundRepository
             }
         }
     }
+
+    public async Task<int> GetAiLogCountAsync()
+    {
+        using (SqlConnection conn = new SqlConnection(_connectionString))
+        using (SqlCommand cmd = new SqlCommand("SELECT COUNT(*) FROM AiLog", conn))
+        {
+            await conn.OpenAsync();
+            return Convert.ToInt32(await cmd.ExecuteScalarAsync());
+        }
+    }
+
+    public async Task<double> GetAverageConfidenceAsync()
+    {
+        using (SqlConnection conn = new SqlConnection(_connectionString))
+        using (SqlCommand cmd = new SqlCommand("SELECT ISNULL(AVG(ConfidenceScore), 0) FROM AiLog", conn))
+        {
+            await conn.OpenAsync();
+            return Convert.ToDouble(await cmd.ExecuteScalarAsync());
+        }
+    }
+
+    public async Task<int> GetActiveUserCountAsync(int days = 7)
+    {
+        using (SqlConnection conn = new SqlConnection(_connectionString))
+        using (SqlCommand cmd = new SqlCommand(
+            @"SELECT COUNT(DISTINCT UserId)
+              FROM AiLog
+              WHERE CreatedDate >= DATEADD(DAY, -@Days, GETUTCDATE())", conn))
+        {
+            cmd.Parameters.AddWithValue("@Days", days);
+            await conn.OpenAsync();
+            return Convert.ToInt32(await cmd.ExecuteScalarAsync());
+        }
+    }
+
+    public async Task<int> GetUnansweredKnowledgeGapCountAsync()
+    {
+        using (SqlConnection conn = new SqlConnection(_connectionString))
+        using (SqlCommand cmd = new SqlCommand(
+            "SELECT COUNT(*) FROM KnowledgeGaps WHERE Status <> 'Resolved'", conn))
+        {
+            await conn.OpenAsync();
+            return Convert.ToInt32(await cmd.ExecuteScalarAsync());
+        }
+    }
+
+    public async Task<List<(DateTime Date, int Count)>> GetDailyQueryCountsAsync(int days = 7)
+    {
+        var result = new List<(DateTime Date, int Count)>();
+
+        using (SqlConnection conn = new SqlConnection(_connectionString))
+        using (SqlCommand cmd = new SqlCommand(
+            @"SELECT CAST(CreatedDate AS DATE) AS QueryDate, COUNT(*) AS QueryCount
+              FROM AiLog
+              WHERE CreatedDate >= DATEADD(DAY, -@Days + 1, GETUTCDATE())
+              GROUP BY CAST(CreatedDate AS DATE)
+              ORDER BY QueryDate", conn))
+        {
+            cmd.Parameters.AddWithValue("@Days", days);
+            await conn.OpenAsync();
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                result.Add((reader.GetDateTime(0), reader.GetInt32(1)));
+            }
+        }
+
+        return result;
+    }
+
+    public async Task<List<(DateTime Date, double Value)>> GetDailyConfidenceTrendAsync(int days = 7)
+    {
+        var result = new List<(DateTime Date, double Value)>();
+
+        using (SqlConnection conn = new SqlConnection(_connectionString))
+        using (SqlCommand cmd = new SqlCommand(
+            @"SELECT CAST(CreatedDate AS DATE) AS QueryDate, ISNULL(AVG(ConfidenceScore), 0) AS AvgConfidence
+              FROM AiLog
+              WHERE CreatedDate >= DATEADD(DAY, -@Days + 1, GETUTCDATE())
+              GROUP BY CAST(CreatedDate AS DATE)
+              ORDER BY QueryDate", conn))
+        {
+            cmd.Parameters.AddWithValue("@Days", days);
+            await conn.OpenAsync();
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                result.Add((reader.GetDateTime(0), Convert.ToDouble(reader.GetValue(1))));
+            }
+        }
+
+        return result;
+    }
+
+    public async Task<List<(string Category, int Count)>> GetIntentCategoryUsageAsync(int top = 10)
+    {
+        var result = new List<(string Category, int Count)>();
+
+        using (SqlConnection conn = new SqlConnection(_connectionString))
+        using (SqlCommand cmd = new SqlCommand(
+            @"SELECT TOP (@Top)
+                    CASE
+                        WHEN Intent IS NULL OR LTRIM(RTRIM(Intent)) = '' THEN 'Unknown'
+                        ELSE Intent
+                    END AS Category,
+                    COUNT(*) AS UsageCount
+              FROM AiLog
+              GROUP BY CASE
+                        WHEN Intent IS NULL OR LTRIM(RTRIM(Intent)) = '' THEN 'Unknown'
+                        ELSE Intent
+                       END
+              ORDER BY UsageCount DESC, Category ASC", conn))
+        {
+            cmd.Parameters.AddWithValue("@Top", top);
+            await conn.OpenAsync();
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                result.Add((reader.GetString(0), reader.GetInt32(1)));
+            }
+        }
+
+        return result;
+    }
+
+    public async Task<List<(string Query, int Count, double AvgConfidence)>> GetTrendingQueriesAsync(int top = 10)
+    {
+        var result = new List<(string Query, int Count, double AvgConfidence)>();
+
+        using (SqlConnection conn = new SqlConnection(_connectionString))
+        using (SqlCommand cmd = new SqlCommand(
+            @"SELECT TOP (@Top) Query, COUNT(*) AS QueryCount, ISNULL(AVG(ConfidenceScore), 0) AS AvgConfidence
+              FROM AiLog
+              WHERE Query IS NOT NULL AND LTRIM(RTRIM(Query)) <> ''
+              GROUP BY Query
+              ORDER BY QueryCount DESC, AvgConfidence DESC", conn))
+        {
+            cmd.Parameters.AddWithValue("@Top", top);
+            await conn.OpenAsync();
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                result.Add((
+                    reader.GetString(0),
+                    reader.GetInt32(1),
+                    Convert.ToDouble(reader.GetValue(2))
+                ));
+            }
+        }
+
+        return result;
+    }
+
+    public async Task<List<Models.KnowledgeGap>> GetKnowledgeGapsAsync(bool includeResolved = true, int top = 100)
+    {
+        var result = new List<Models.KnowledgeGap>();
+
+        using (SqlConnection conn = new SqlConnection(_connectionString))
+        {
+            var query = includeResolved
+                ? @"SELECT TOP (@Top) Id, Question, DetectedIntent, ConfidenceScore, OccurrenceCount, LastAsked, Status, SuggestedAnswer, CreatedAt
+                    FROM KnowledgeGaps
+                    ORDER BY OccurrenceCount DESC, LastAsked DESC"
+                : @"SELECT TOP (@Top) Id, Question, DetectedIntent, ConfidenceScore, OccurrenceCount, LastAsked, Status, SuggestedAnswer, CreatedAt
+                    FROM KnowledgeGaps
+                    WHERE Status <> 'Resolved'
+                    ORDER BY OccurrenceCount DESC, LastAsked DESC";
+
+            using (SqlCommand cmd = new SqlCommand(query, conn))
+            {
+                cmd.Parameters.AddWithValue("@Top", top);
+                await conn.OpenAsync();
+                using var reader = await cmd.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    result.Add(new Models.KnowledgeGap
+                    {
+                        Id = reader.GetInt32(0),
+                        Question = reader.GetString(1),
+                        DetectedIntent = reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
+                        ConfidenceScore = reader.IsDBNull(3) ? 0 : Convert.ToDouble(reader.GetValue(3)),
+                        OccurrenceCount = reader.GetInt32(4),
+                        LastAsked = reader.GetDateTime(5),
+                        Status = reader.GetString(6),
+                        SuggestedAnswer = reader.IsDBNull(7) ? null : reader.GetString(7),
+                        CreatedAt = reader.GetDateTime(8)
+                    });
+                }
+            }
+        }
+
+        return result;
+    }
+
+    public async Task<Models.KnowledgeGap?> GetKnowledgeGapByIdAsync(int id)
+    {
+        using (SqlConnection conn = new SqlConnection(_connectionString))
+        using (SqlCommand cmd = new SqlCommand(
+            @"SELECT Id, Question, DetectedIntent, ConfidenceScore, OccurrenceCount, LastAsked, Status, SuggestedAnswer, CreatedAt
+              FROM KnowledgeGaps
+              WHERE Id = @Id", conn))
+        {
+            cmd.Parameters.AddWithValue("@Id", id);
+            await conn.OpenAsync();
+            using var reader = await cmd.ExecuteReaderAsync();
+            if (await reader.ReadAsync())
+            {
+                return new Models.KnowledgeGap
+                {
+                    Id = reader.GetInt32(0),
+                    Question = reader.GetString(1),
+                    DetectedIntent = reader.IsDBNull(2) ? string.Empty : reader.GetString(2),
+                    ConfidenceScore = reader.IsDBNull(3) ? 0 : Convert.ToDouble(reader.GetValue(3)),
+                    OccurrenceCount = reader.GetInt32(4),
+                    LastAsked = reader.GetDateTime(5),
+                    Status = reader.GetString(6),
+                    SuggestedAnswer = reader.IsDBNull(7) ? null : reader.GetString(7),
+                    CreatedAt = reader.GetDateTime(8)
+                };
+            }
+        }
+
+        return null;
+    }
 }
