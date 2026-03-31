@@ -3,3 +3,13 @@ node_modules
 **/node_modules/
 temp_auto_push.bat
 temp_interactive_push.bat
+.dotnet/
+.vs/
+frontend/dist/
+Ai_Fund/bin/
+Ai_Fund/obj/
+Ai_Fund/appsettings.Development.json
+Ai_Fund/*.user
+*_test.json
+yahoo_*.json
+build_errors.txt
