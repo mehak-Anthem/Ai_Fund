@@ -6,6 +6,7 @@ import {
   AnalyticsData,
   KnowledgeGap,
   KnowledgeGapUpdateRequest,
+  QdrantStatus,
   TrendingQuery,
 } from '../types/admin.types';
 
@@ -75,6 +76,16 @@ class AdminApiService {
 
   async getTrendingQueries(): Promise<TrendingQuery[]> {
     const response = await this.api.get<TrendingQuery[]>('/admin/trending-queries');
+    return response.data;
+  }
+
+  async getQdrantStatus(): Promise<QdrantStatus> {
+    const response = await this.api.get<QdrantStatus>('/KnowledgeGap/qdrant-status');
+    return response.data;
+  }
+
+  async syncKnowledgeToQdrant(): Promise<{ message?: string }> {
+    const response = await this.api.post<{ message?: string }>('/KnowledgeGap/sync-to-qdrant');
     return response.data;
   }
 }

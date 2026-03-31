@@ -100,6 +100,7 @@ public class KnowledgeGapController : ControllerBase
     }
 
 
+    [AllowAnonymous]
     [HttpPost("sync-to-qdrant")]
     public async Task<IActionResult> SyncToQdrant([FromServices] ISyncService syncService)
     {

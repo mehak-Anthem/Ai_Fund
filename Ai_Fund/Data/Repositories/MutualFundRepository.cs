@@ -1,3 +1,4 @@
+using Ai_Fund.Configuration;
 using Ai_Fund.Data.Interfaces;
 using Ai_Fund.Models;
 using System.Data;
@@ -11,8 +12,7 @@ public class MutualFundRepository : IMutualFundRepository
 
     public MutualFundRepository(IConfiguration configuration)
     {
-        _connectionString = configuration.GetConnectionString("DefaultConnection") 
-            ?? throw new ArgumentNullException("Connection string not found");
+        _connectionString = AppConfiguration.GetRequiredConnectionString(configuration);
     }
 
     public async Task<List<(int Id, string Question, string Answer, string Embedding)>> GetAllKnowledgeAsync()

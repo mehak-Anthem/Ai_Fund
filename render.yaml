@@ -1,5 +1,11 @@
 services:
   - type: web
+    name: ai-fund-api
+    runtime: docker
+    rootDir: Ai_Fund
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+  - type: web
     runtime: static
     name: fundai-frontend
     rootDir: frontend

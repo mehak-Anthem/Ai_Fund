@@ -52,6 +52,12 @@ export interface KnowledgeGapUpdateRequest {
   status: 'New' | 'Reviewing' | 'Resolved';
 }
 
+export interface QdrantStatus {
+  collectionExists: boolean;
+  collectionName: string;
+  status: string;
+}
+
 export interface TrendingQuery {
   query: string;
   count: number;

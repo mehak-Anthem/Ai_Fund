@@ -1,3 +1,4 @@
+using Ai_Fund.Configuration;
 using Ai_Fund.Data.Interfaces;
 using Ai_Fund.Data.Repositories;
 using Ai_Fund.Services;
@@ -41,7 +42,25 @@ builder.Services.AddScoped<IMarketService, MarketService>();
 
 // Configure JWT Authentication
 var jwtSettings = builder.Configuration.GetSection("Jwt");
-var key = Encoding.ASCII.GetBytes(jwtSettings["Key"] ?? "vK5p8S9zX2y4m1N7q3R6t0W4e1Q8i0O2p5A7s3D9f1G0h2J4k6L8");
+var jwtKey = AppConfiguration.GetValue(
+    builder.Configuration,
+    "Jwt:Key",
+    "Jwt__Key",
+    "JWT_KEY")
+    ?? "vK5p8S9zX2y4m1N7q3R6t0W4e1Q8i0O2p5A7s3D9f1G0h2J4k6L8";
+var jwtIssuer = AppConfiguration.GetValue(
+    builder.Configuration,
+    "Jwt:Issuer",
+    "Jwt__Issuer",
+    "JWT_ISSUER")
+    ?? "AiFundIssuer";
+var jwtAudience = AppConfiguration.GetValue(
+    builder.Configuration,
+    "Jwt:Audience",
+    "Jwt__Audience",
+    "JWT_AUDIENCE")
+    ?? "AiFundAudience";
+var key = Encoding.ASCII.GetBytes(jwtKey);
 
 builder.Services.AddAuthentication(x =>
 {
@@ -58,8 +77,8 @@ builder.Services.AddAuthentication(x =>
         IssuerSigningKey = new SymmetricSecurityKey(key),
         ValidateIssuer = true,
         ValidateAudience = true,
-        ValidIssuer = jwtSettings["Issuer"],
-        ValidAudience = jwtSettings["Audience"],
+        ValidIssuer = jwtIssuer,
+        ValidAudience = jwtAudience,
         ClockSkew = TimeSpan.Zero
     };
 });
@@ -121,6 +140,45 @@ app.UseSwaggerUI(c =>
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.MapGet("/health", (IConfiguration configuration) => Results.Ok(new
+{
+    status = "ok",
+    environment = app.Environment.EnvironmentName,
+    config = new
+    {
+        databaseConfigured = AppConfiguration.HasConfiguredValue(
+            configuration,
+            "ConnectionStrings:DefaultConnection",
+            "DefaultConnection",
+            "ConnectionStrings__DefaultConnection"),
+        jwtConfigured = AppConfiguration.HasConfiguredValue(
+            configuration,
+            "Jwt:Key",
+            "Jwt__Key",
+            "JWT_KEY"),
+        qdrantConfigured = AppConfiguration.HasConfiguredValue(
+            configuration,
+            "Qdrant:Host",
+            "Qdrant__Host",
+            "QDRANT_HOST"),
+        geminiConfigured = AppConfiguration.HasConfiguredValue(
+            configuration,
+            "Gemini:ApiKey",
+            "Gemini__ApiKey",
+            "GEMINI_API_KEY"),
+        groqConfigured = AppConfiguration.HasConfiguredValue(
+            configuration,
+            "Groq:ApiKey",
+            "Groq__ApiKey",
+            "GROQ_API_KEY"),
+        marketAuxConfigured = AppConfiguration.HasConfiguredValue(
+            configuration,
+            "MarketAux:ApiKey",
+            "MarketAux__ApiKey",
+            "MARKETAUX_API_KEY")
+    }
+}));
 
 app.MapControllers();
 
